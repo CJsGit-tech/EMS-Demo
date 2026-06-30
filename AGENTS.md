@@ -23,3 +23,11 @@ Rules:
 
 - Root policy/instructions live in `AGENTS.md`.
 - Finalized design and product-scope records live in `design/`.
+
+## Git Remote Preference
+
+For this repository, if GitHub push/authentication is blocked because `origin` uses HTTPS, the agent should ask for approval to run:
+
+`git remote set-url origin git@github.com:CJsGit-tech/EMS-Demo.git`
+
+This is the preferred remote format for future Codex push workflows in this repo.
