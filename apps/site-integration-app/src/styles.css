@@ -102,6 +102,9 @@ a {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 80;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -266,6 +269,7 @@ a {
 
 .locale-menu {
   position: relative;
+  z-index: 90;
 }
 
 .locale-token-button {
@@ -311,7 +315,7 @@ a {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 12;
+  z-index: 100;
   display: grid;
   gap: 4px;
   min-width: 140px;
@@ -3173,9 +3177,6 @@ input:focus-visible {
   }
 
   .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
     align-items: center;
   }
 

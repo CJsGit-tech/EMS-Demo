@@ -1351,7 +1351,7 @@ function App() {
               </Geographies>
               ) : null}
 
-              {countryAtlasData ? countrySites.map((site) => (
+              {countrySites.map((site) => (
                 <Marker key={site.id} coordinates={site.coordinates}>
                   <g
                     data-marker-id={site.id}
@@ -1377,7 +1377,7 @@ function App() {
                     <circle className="marker-core" r="5.2" />
                   </g>
                 </Marker>
-              )) : null}
+              ))}
             </ComposableMap>
           ) : (
             <ComposableMap

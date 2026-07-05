@@ -55,8 +55,18 @@ Purpose:
 Current implementation:
 - Vite + React app scaffold is in place
 - Interactive world map and country drill-in views are implemented
-- Site workspace is implemented with `Overview`, `EMS`, `Reports`, and `Dev` sections
+- Site workspace is implemented with `Overview`, `Devices`, `EMS`, `Reports`, `Alerts`, and `Site` sections
 - i18n and light/dark theme support are implemented
+
+Screenshots:
+
+| Portfolio map | Site overview |
+|---|---|
+| ![Portfolio map view](docs/screenshots/site-integration-app/01-portfolio-map.png) | ![Site overview workspace](docs/screenshots/site-integration-app/02-site-overview.png) |
+
+| EMS workflows | Report records | Open alerts |
+|---|---|---|
+| ![EMS workflows tab](docs/screenshots/site-integration-app/03-site-ems.png) | ![Report records tab](docs/screenshots/site-integration-app/04-site-reports.png) | ![Open alerts tab](docs/screenshots/site-integration-app/05-site-alerts.png) |
 
 Planned next work:
 - Deeper site detail refinement and UX hardening
