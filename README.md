@@ -14,10 +14,18 @@ Together, they cover site monitoring, internal operations, and EMS decision supp
 
 ```text
 .
-├── PRODUCT.md
-├── DESIGN.md
-├── REQUEST.md
 ├── AGENTS.md
+├── README.md
+├── docs/
+│   └── context/
+│       ├── platform/
+│       │   ├── PRODUCT.md
+│       │   ├── DESIGN.md
+│       │   └── REQUEST.md
+│       └── apps/
+│           ├── site-integration-app/
+│           ├── internal-operations-app/
+│           └── energy-operations-app/
 └── apps/
     ├── site-integration-app/
     ├── internal-operations-app/
@@ -66,7 +74,7 @@ Purpose:
 - Support report, form, and document generation
 
 Current implementation:
-- Product scope is defined in `apps/internal-operations-app/PRODUCT.md`
+- Product scope is defined in `docs/context/apps/internal-operations-app/PRODUCT.md`
 - No frontend application scaffold has been created yet
 
 Planned next work:
@@ -84,7 +92,7 @@ Purpose:
 - Track energy-resource commercialization and inventory
 
 Current implementation:
-- Product scope is defined in `apps/energy-operations-app/PRODUCT.md`
+- Product scope is defined in `docs/context/apps/energy-operations-app/PRODUCT.md`
 - No frontend application scaffold has been created yet
 
 Planned next work:
@@ -121,11 +129,15 @@ Planned next work:
 
 Primary planning inputs live in:
 
-- `PRODUCT.md`
-- `DESIGN.md`
-- `REQUEST.md`
-- `apps/internal-operations-app/PRODUCT.md`
-- `apps/energy-operations-app/PRODUCT.md`
+- `docs/context/README.md`
+- `docs/context/platform/PRODUCT.md`
+- `docs/context/platform/DESIGN.md`
+- `docs/context/platform/REQUEST.md`
+- `docs/context/apps/site-integration-app/README.md`
+- `docs/context/apps/internal-operations-app/PRODUCT.md`
+- `docs/context/apps/energy-operations-app/PRODUCT.md`
+
+Root-level `PRODUCT.md`, `DESIGN.md`, and `REQUEST.md` are compatibility pointers to the canonical files under `docs/context/`.
 
 ## Local Development
 

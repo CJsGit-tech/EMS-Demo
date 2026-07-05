@@ -1,0 +1,680 @@
+[
+  {
+    "site": {
+      "id": "taoyuan-logistics",
+      "code": "TXG-06",
+      "name": "Taichung Logistics",
+      "nameZhTw": "台中物流站",
+      "city": "Taichung",
+      "country": "Taiwan",
+      "region": "Asia Pacific",
+      "timezone": "Asia/Taipei",
+      "siteType": "Logistics hub",
+      "status": "critical",
+      "owner": {
+        "name": "Yi-Ting Hsu",
+        "team": "Facilities operations"
+      }
+    },
+    "summary": {
+      "headline": "Reserve capacity recovery",
+      "headlineZhTw": "備轉容量恢復",
+      "currentPosture": "Immediate system review required",
+      "nextAction": "Hold aggressive charger discharge until inverter review closes.",
+      "openAlarmCount": 4,
+      "lastUpdated": "3m ago"
+    },
+    "energyProfile": {
+      "siteEuiKbtuFt2Yr": 74.2,
+      "sourceEuiKbtuFt2Yr": 161.3,
+      "annualEmissionsTco2e": 1218.4,
+      "avoidedEmissionsTco2e": 93.7,
+      "actualDemandKw": 984,
+      "forecastDemandKw": 1036,
+      "peakDemandKw": 1180,
+      "peakWindow": "15:00-17:00",
+      "loadFactorPct": 73.4,
+      "actualGenerationKw": 301,
+      "forecastGenerationKw": 338,
+      "forecastConfidencePct": 82,
+      "forecastErrorPct": 5.7,
+      "forecastBiasPct": -2.1,
+      "loadTrend24h": [
+        { "hour": "06:00", "actualKw": 612, "forecastKw": 640 },
+        { "hour": "10:00", "actualKw": 901, "forecastKw": 880 },
+        { "hour": "14:00", "actualKw": 984, "forecastKw": 1036 },
+        { "hour": "18:00", "actualKw": 874, "forecastKw": 910 },
+        { "hour": "22:00", "actualKw": 654, "forecastKw": 680 }
+      ],
+      "generationTrend24h": [
+        { "hour": "06:00", "actualKw": 42, "forecastKw": 40 },
+        { "hour": "10:00", "actualKw": 224, "forecastKw": 248 },
+        { "hour": "14:00", "actualKw": 301, "forecastKw": 338 },
+        { "hour": "18:00", "actualKw": 119, "forecastKw": 132 },
+        { "hour": "22:00", "actualKw": 0, "forecastKw": 0 }
+      ]
+    },
+    "assets": {
+      "hvac": {
+        "status": "Warning",
+        "onlineUnits": 41,
+        "totalUnits": 64,
+        "setpointDriftC": 1.7,
+        "runtimeHours24h": 19.4,
+        "sensorTrend24h": [
+          { "hour": "06:00", "zoneTempC": 23.8, "setpointC": 22.5, "runtimePct": 71 },
+          { "hour": "10:00", "zoneTempC": 24.4, "setpointC": 22.5, "runtimePct": 84 },
+          { "hour": "14:00", "zoneTempC": 25.1, "setpointC": 22.5, "runtimePct": 91 },
+          { "hour": "18:00", "zoneTempC": 24.7, "setpointC": 22.5, "runtimePct": 88 },
+          { "hour": "22:00", "zoneTempC": 23.6, "setpointC": 22.5, "runtimePct": 69 }
+        ]
+      },
+      "storage": {
+        "stateOfChargePct": 38,
+        "stateOfHealthPct": 91,
+        "availablePowerKw": 460,
+        "availableEnergyKwh": 1320,
+        "reserveMarginPct": 8,
+        "roundTripEfficiencyPct": 88.4,
+        "cycles30d": 42
+      },
+      "generation": {
+        "actualKw": 301,
+        "forecastKw": 338,
+        "capacityFactorPct": 26.8,
+        "curtailmentRiskLevel": "watch"
+      },
+      "chargers": {
+        "activeChargers": 14,
+        "connectedFleetCount": 22,
+        "v2gAvailableKw": 260,
+        "utilizationPct": 81,
+        "businessModeRecommendation": "Protect reserve before commercial export."
+      },
+      "mobileChargers": [
+        {
+          "unitId": "MC-12",
+          "status": "redeploying",
+          "destination": "Taoyuan North Yard",
+          "etaMinutes": 48,
+          "priority": "high"
+        },
+        {
+          "unitId": "MC-18",
+          "status": "ready",
+          "destination": "Taichung Logistics",
+          "etaMinutes": 0,
+          "priority": "medium"
+        }
+      ],
+      "inventory": {
+        "tradableInventoryMwh": 1.2,
+        "reservedInventoryMwh": 2.7,
+        "releaseThresholdMwh": 1.8,
+        "settlementStatus": "Hold",
+        "holdReason": "Reserve bank below release threshold."
+      },
+      "storageTrend24h": [
+        { "hour": "06:00", "socPct": 54, "reserveFloorPct": 24 },
+        { "hour": "10:00", "socPct": 49, "reserveFloorPct": 24 },
+        { "hour": "14:00", "socPct": 38, "reserveFloorPct": 30 },
+        { "hour": "18:00", "socPct": 41, "reserveFloorPct": 30 },
+        { "hour": "22:00", "socPct": 46, "reserveFloorPct": 24 }
+      ],
+      "exportPlan": [
+        { "window": "16:00", "plannedKw": 180, "availableKw": 96 },
+        { "window": "17:00", "plannedKw": 220, "availableKw": 104 },
+        { "window": "18:00", "plannedKw": 160, "availableKw": 112 }
+      ]
+    },
+    "modules": [
+      {
+        "moduleKey": "consumption-forecasting-optimization",
+        "name": "Consumption Forecasting & Optimization",
+        "nameZhTw": "用電預測與優化",
+        "currentPosture": "Demand response needs intervention",
+        "forecast": "The next demand window is still above the preferred reserve-backed band.",
+        "risk": "Demand overrun risk elevated",
+        "recommendedAction": "Prioritize reserve recovery before the evening peak window.",
+        "owner": "Facilities operations",
+        "cadence": "30-minute demand plan",
+        "metrics": {
+          "actualDemandKw": 984,
+          "forecastDemandKw": 1036,
+          "peakDemandKw": 1180,
+          "expectedSavingsUsd": 214,
+          "demandResponseReady": false
+        }
+      },
+      {
+        "moduleKey": "bidirectional-charger-operations",
+        "name": "Bidirectional Charger Operations",
+        "nameZhTw": "雙向充電樁",
+        "currentPosture": "Reserve bank is constrained",
+        "forecast": "Bidirectional output remains below the release threshold.",
+        "risk": "Reserve shortfall risk",
+        "recommendedAction": "Hold aggressive discharge until inverter review clears.",
+        "owner": "Fleet operations",
+        "cadence": "Hourly reserve posture",
+        "metrics": {
+          "activeChargers": 14,
+          "connectedFleetCount": 22,
+          "v2gAvailableKw": 260,
+          "reserveMarginPct": 8,
+          "utilizationPct": 81
+        }
+      },
+      {
+        "moduleKey": "energy-resource-commercial-inventory",
+        "name": "Energy Resource Commercial Inventory",
+        "nameZhTw": "能源資源商品化庫存管理",
+        "currentPosture": "Inventory release is restricted",
+        "forecast": "Commercial inventory cannot fully support the current plan.",
+        "risk": "Commercial hold is active",
+        "recommendedAction": "Escalate release decision with market operations.",
+        "owner": "Commercial inventory desk",
+        "cadence": "Daily inventory release",
+        "metrics": {
+          "tradableInventoryMwh": 1.2,
+          "reservedInventoryMwh": 2.7,
+          "releaseThresholdMwh": 1.8,
+          "settlementStatus": "Hold"
+        }
+      }
+    ],
+    "alerts": [
+      {
+        "id": "ALT-201",
+        "severity": "critical",
+        "title": "Inverter review blocking reserve release",
+        "titleZhTw": "逆變器檢查阻塞備轉釋放",
+        "owner": "Yi-Ting Hsu",
+        "moduleKey": "bidirectional-charger-operations",
+        "openedAgo": "19m",
+        "dueWindow": "Before 17:00 dispatch lock",
+        "status": "open"
+      },
+      {
+        "id": "ALT-202",
+        "severity": "watch",
+        "title": "Peak load window forecast widened",
+        "titleZhTw": "尖峰負載預測區間擴大",
+        "owner": "Energy desk",
+        "moduleKey": "consumption-forecasting-optimization",
+        "openedAgo": "33m",
+        "dueWindow": "Next demand plan refresh",
+        "status": "open"
+      }
+    ],
+    "reports": [
+      {
+        "id": "daily-ops-brief",
+        "type": "daily",
+        "title": "Daily operations brief",
+        "titleZhTw": "每日營運簡報",
+        "status": "attention",
+        "updated": "9m ago",
+        "purpose": "Handoff alarms, HVAC exceptions, EMS posture, and the next operator decision before evening dispatch.",
+        "includes": [
+          "Alarm count and exception ownership",
+          "HVAC and EMS posture summary",
+          "Next operator checkpoint"
+        ],
+        "decisionCue": "Can the site safely clear the next reserve-backed dispatch window?"
+      },
+      {
+        "id": "settlement-packet",
+        "type": "settlement",
+        "title": "Settlement and commercial packet",
+        "titleZhTw": "結算與商務封包",
+        "status": "draft",
+        "updated": "27m ago",
+        "purpose": "Clarify export posture, reserve-backed inventory release, and settlement readiness.",
+        "includes": [
+          "Export and revenue posture",
+          "Inventory release conditions",
+          "Required settlement documents"
+        ],
+        "decisionCue": "Should inventory remain on hold through the current market window?"
+      }
+    ],
+    "visualizations": [
+      {
+        "id": "devices-load-trend-24h",
+        "type": "line-actual-vs-forecast",
+        "title": "24h load trend",
+        "dataKey": "energyProfile.loadTrend24h",
+        "tab": "devices"
+      },
+      {
+        "id": "ems-soc-reserve-band",
+        "type": "line-with-band",
+        "title": "Storage SOC and reserve band",
+        "dataKey": "assets.storageTrend24h",
+        "tab": "ems"
+      },
+      {
+        "id": "ems-export-plan",
+        "type": "bar-planned-vs-available",
+        "title": "Export plan vs available",
+        "dataKey": "assets.exportPlan",
+        "tab": "ems"
+      }
+    ]
+  },
+  {
+    "site": {
+      "id": "taoyuan-hub",
+      "code": "TPE-02",
+      "name": "Taipei Hub",
+      "nameZhTw": "台北樞紐站",
+      "city": "Taipei",
+      "country": "Taiwan",
+      "region": "Asia Pacific",
+      "timezone": "Asia/Taipei",
+      "siteType": "Urban operations hub",
+      "status": "watch",
+      "owner": {
+        "name": "Chia-Hao Lin",
+        "team": "Facilities operations"
+      }
+    },
+    "summary": {
+      "headline": "HVAC fault isolation",
+      "headlineZhTw": "HVAC 異常隔離",
+      "currentPosture": "One operating signal needs review",
+      "nextAction": "Inspect the delayed meter stream before the next EMS planning cycle.",
+      "openAlarmCount": 3,
+      "lastUpdated": "9m ago"
+    },
+    "energyProfile": {
+      "siteEuiKbtuFt2Yr": 68.6,
+      "sourceEuiKbtuFt2Yr": 149.2,
+      "annualEmissionsTco2e": 1041.3,
+      "avoidedEmissionsTco2e": 76.4,
+      "actualDemandKw": 812,
+      "forecastDemandKw": 838,
+      "peakDemandKw": 962,
+      "peakWindow": "14:30-16:30",
+      "loadFactorPct": 77.1,
+      "actualGenerationKw": 246,
+      "forecastGenerationKw": 259,
+      "forecastConfidencePct": 88,
+      "forecastErrorPct": 3.1,
+      "forecastBiasPct": -1.4,
+      "loadTrend24h": [
+        { "hour": "06:00", "actualKw": 534, "forecastKw": 548 },
+        { "hour": "10:00", "actualKw": 744, "forecastKw": 756 },
+        { "hour": "14:00", "actualKw": 812, "forecastKw": 838 },
+        { "hour": "18:00", "actualKw": 759, "forecastKw": 778 },
+        { "hour": "22:00", "actualKw": 588, "forecastKw": 602 }
+      ],
+      "generationTrend24h": [
+        { "hour": "06:00", "actualKw": 36, "forecastKw": 34 },
+        { "hour": "10:00", "actualKw": 188, "forecastKw": 201 },
+        { "hour": "14:00", "actualKw": 246, "forecastKw": 259 },
+        { "hour": "18:00", "actualKw": 96, "forecastKw": 102 },
+        { "hour": "22:00", "actualKw": 0, "forecastKw": 0 }
+      ]
+    },
+    "assets": {
+      "hvac": {
+        "status": "Warning",
+        "onlineUnits": 58,
+        "totalUnits": 64,
+        "setpointDriftC": 0.8,
+        "runtimeHours24h": 17.2,
+        "sensorTrend24h": [
+          { "hour": "06:00", "zoneTempC": 22.9, "setpointC": 22.3, "runtimePct": 62 },
+          { "hour": "10:00", "zoneTempC": 23.2, "setpointC": 22.3, "runtimePct": 70 },
+          { "hour": "14:00", "zoneTempC": 23.6, "setpointC": 22.3, "runtimePct": 76 },
+          { "hour": "18:00", "zoneTempC": 23.1, "setpointC": 22.3, "runtimePct": 68 },
+          { "hour": "22:00", "zoneTempC": 22.7, "setpointC": 22.3, "runtimePct": 55 }
+        ]
+      },
+      "storage": {
+        "stateOfChargePct": 57,
+        "stateOfHealthPct": 93,
+        "availablePowerKw": 520,
+        "availableEnergyKwh": 1680,
+        "reserveMarginPct": 21,
+        "roundTripEfficiencyPct": 89.2,
+        "cycles30d": 35
+      },
+      "generation": {
+        "actualKw": 246,
+        "forecastKw": 259,
+        "capacityFactorPct": 28.4,
+        "curtailmentRiskLevel": "healthy"
+      },
+      "chargers": {
+        "activeChargers": 18,
+        "connectedFleetCount": 26,
+        "v2gAvailableKw": 312,
+        "utilizationPct": 66,
+        "businessModeRecommendation": "Keep balanced fleet support mode."
+      },
+      "mobileChargers": [
+        {
+          "unitId": "MC-08",
+          "status": "ready",
+          "destination": "Taipei Hub",
+          "etaMinutes": 0,
+          "priority": "medium"
+        }
+      ],
+      "inventory": {
+        "tradableInventoryMwh": 2.4,
+        "reservedInventoryMwh": 1.3,
+        "releaseThresholdMwh": 1.1,
+        "settlementStatus": "Review",
+        "holdReason": "One meter stream is delayed."
+      },
+      "storageTrend24h": [
+        { "hour": "06:00", "socPct": 62, "reserveFloorPct": 24 },
+        { "hour": "10:00", "socPct": 59, "reserveFloorPct": 24 },
+        { "hour": "14:00", "socPct": 57, "reserveFloorPct": 24 },
+        { "hour": "18:00", "socPct": 61, "reserveFloorPct": 24 },
+        { "hour": "22:00", "socPct": 64, "reserveFloorPct": 24 }
+      ],
+      "exportPlan": [
+        { "window": "16:00", "plannedKw": 128, "availableKw": 166 },
+        { "window": "17:00", "plannedKw": 144, "availableKw": 166 },
+        { "window": "18:00", "plannedKw": 116, "availableKw": 152 }
+      ]
+    },
+    "modules": [
+      {
+        "moduleKey": "consumption-forecasting-optimization",
+        "name": "Consumption Forecasting & Optimization",
+        "nameZhTw": "用電預測與優化",
+        "currentPosture": "One load condition needs review",
+        "forecast": "Peak window remains manageable if the next review lands on time.",
+        "risk": "HVAC drift may reduce savings capture",
+        "recommendedAction": "Inspect the drifting load source before evening handoff.",
+        "owner": "Facilities operations",
+        "cadence": "30-minute demand plan",
+        "metrics": {
+          "actualDemandKw": 812,
+          "forecastDemandKw": 838,
+          "peakDemandKw": 962,
+          "expectedSavingsUsd": 146,
+          "demandResponseReady": true
+        }
+      },
+      {
+        "moduleKey": "sell-power-forecasting-management",
+        "name": "Sell-Power Forecasting & Management",
+        "nameZhTw": "售電預測與管理",
+        "currentPosture": "One commercial check remains",
+        "forecast": "Revenue capture stays available if reconciliation closes.",
+        "risk": "Nomination mismatch is being watched",
+        "recommendedAction": "Close the pending market check before commitment lock.",
+        "owner": "Market operations",
+        "cadence": "Hourly nomination review",
+        "metrics": {
+          "exportCommittedKw": 144,
+          "exportAvailableKw": 166,
+          "expectedRevenueUsd": 283,
+          "nominationStatus": "Pending review"
+        }
+      },
+      {
+        "moduleKey": "energy-resource-commercial-inventory",
+        "name": "Energy Resource Commercial Inventory",
+        "nameZhTw": "能源資源商品化庫存管理",
+        "currentPosture": "One inventory condition is held",
+        "forecast": "Reserved inventory may stay locked through the next window.",
+        "risk": "Release threshold is being watched",
+        "recommendedAction": "Review the hold reason before release approval.",
+        "owner": "Commercial inventory desk",
+        "cadence": "Daily inventory release",
+        "metrics": {
+          "tradableInventoryMwh": 2.4,
+          "reservedInventoryMwh": 1.3,
+          "releaseThresholdMwh": 1.1,
+          "settlementStatus": "Review"
+        }
+      }
+    ],
+    "alerts": [
+      {
+        "id": "ALT-118",
+        "severity": "watch",
+        "title": "Meter stream delayed",
+        "titleZhTw": "電表資料流延遲",
+        "owner": "Chia-Hao Lin",
+        "moduleKey": "energy-resource-commercial-inventory",
+        "openedAgo": "12m",
+        "dueWindow": "Before 16:00 review",
+        "status": "open"
+      }
+    ],
+    "reports": [
+      {
+        "id": "daily-ops-brief",
+        "type": "daily",
+        "title": "Daily operations brief",
+        "titleZhTw": "每日營運簡報",
+        "status": "ready",
+        "updated": "9m ago",
+        "purpose": "Summarize alarms, HVAC posture, and dispatch recommendations for the next shift handoff.",
+        "includes": [
+          "Alarm count and exception ownership",
+          "HVAC and EMS posture summary",
+          "Next operator checkpoint"
+        ],
+        "decisionCue": "Can the site proceed with routine dispatch recommendations?"
+      },
+      {
+        "id": "weekly-review",
+        "type": "weekly",
+        "title": "Weekly optimization review",
+        "titleZhTw": "每週優化檢討",
+        "status": "review",
+        "updated": "1d ago",
+        "purpose": "Review forecast quality, charger readiness, and approval items for next-week planning.",
+        "includes": [
+          "Forecast and optimization drift",
+          "Reserve and charger posture review",
+          "Approval items for the next planning cycle"
+        ],
+        "decisionCue": "Which module needs manager approval before next week?"
+      }
+    ],
+    "visualizations": [
+      {
+        "id": "devices-load-trend-24h",
+        "type": "line-actual-vs-forecast",
+        "title": "24h load trend",
+        "dataKey": "energyProfile.loadTrend24h",
+        "tab": "devices"
+      },
+      {
+        "id": "reports-list",
+        "type": "document-list",
+        "title": "Site reports",
+        "dataKey": "reports",
+        "tab": "reports"
+      }
+    ]
+  },
+  {
+    "site": {
+      "id": "taoyuan-west",
+      "code": "KHH-07",
+      "name": "Kaohsiung West",
+      "nameZhTw": "高雄西站",
+      "city": "Kaohsiung",
+      "country": "Taiwan",
+      "region": "Asia Pacific",
+      "timezone": "Asia/Taipei",
+      "siteType": "Commercial operations site",
+      "status": "healthy",
+      "owner": {
+        "name": "Wei-Lun Chen",
+        "team": "Facilities operations"
+      }
+    },
+    "summary": {
+      "headline": "Load-shift readiness",
+      "headlineZhTw": "移峰就緒",
+      "currentPosture": "All operating signals aligned",
+      "nextAction": "Keep the current optimization cadence through the evening curtailment window.",
+      "openAlarmCount": 0,
+      "lastUpdated": "12m ago"
+    },
+    "energyProfile": {
+      "siteEuiKbtuFt2Yr": 61.1,
+      "sourceEuiKbtuFt2Yr": 134.4,
+      "annualEmissionsTco2e": 812.6,
+      "avoidedEmissionsTco2e": 101.8,
+      "actualDemandKw": 684,
+      "forecastDemandKw": 698,
+      "peakDemandKw": 802,
+      "peakWindow": "16:00-18:00",
+      "loadFactorPct": 79.5,
+      "actualGenerationKw": 224,
+      "forecastGenerationKw": 228,
+      "forecastConfidencePct": 93,
+      "forecastErrorPct": 1.6,
+      "forecastBiasPct": 0.4,
+      "loadTrend24h": [
+        { "hour": "06:00", "actualKw": 462, "forecastKw": 470 },
+        { "hour": "10:00", "actualKw": 612, "forecastKw": 620 },
+        { "hour": "14:00", "actualKw": 684, "forecastKw": 698 },
+        { "hour": "18:00", "actualKw": 706, "forecastKw": 712 },
+        { "hour": "22:00", "actualKw": 516, "forecastKw": 522 }
+      ],
+      "generationTrend24h": [
+        { "hour": "06:00", "actualKw": 31, "forecastKw": 30 },
+        { "hour": "10:00", "actualKw": 176, "forecastKw": 181 },
+        { "hour": "14:00", "actualKw": 224, "forecastKw": 228 },
+        { "hour": "18:00", "actualKw": 88, "forecastKw": 91 },
+        { "hour": "22:00", "actualKw": 0, "forecastKw": 0 }
+      ]
+    },
+    "assets": {
+      "hvac": {
+        "status": "Normal",
+        "onlineUnits": 27,
+        "totalUnits": 64,
+        "setpointDriftC": 0.2,
+        "runtimeHours24h": 15.1,
+        "sensorTrend24h": [
+          { "hour": "06:00", "zoneTempC": 22.4, "setpointC": 22.4, "runtimePct": 48 },
+          { "hour": "10:00", "zoneTempC": 22.6, "setpointC": 22.4, "runtimePct": 54 },
+          { "hour": "14:00", "zoneTempC": 22.8, "setpointC": 22.4, "runtimePct": 59 },
+          { "hour": "18:00", "zoneTempC": 22.5, "setpointC": 22.4, "runtimePct": 52 },
+          { "hour": "22:00", "zoneTempC": 22.2, "setpointC": 22.4, "runtimePct": 41 }
+        ]
+      },
+      "storage": {
+        "stateOfChargePct": 64,
+        "stateOfHealthPct": 95,
+        "availablePowerKw": 580,
+        "availableEnergyKwh": 1940,
+        "reserveMarginPct": 29,
+        "roundTripEfficiencyPct": 90.6,
+        "cycles30d": 28
+      },
+      "generation": {
+        "actualKw": 224,
+        "forecastKw": 228,
+        "capacityFactorPct": 29.7,
+        "curtailmentRiskLevel": "healthy"
+      },
+      "chargers": {
+        "activeChargers": 10,
+        "connectedFleetCount": 16,
+        "v2gAvailableKw": 198,
+        "utilizationPct": 52,
+        "businessModeRecommendation": "Maintain balanced load-shift mode."
+      },
+      "mobileChargers": [],
+      "inventory": {
+        "tradableInventoryMwh": 3.1,
+        "reservedInventoryMwh": 0.8,
+        "releaseThresholdMwh": 0.9,
+        "settlementStatus": "Ready",
+        "holdReason": ""
+      },
+      "storageTrend24h": [
+        { "hour": "06:00", "socPct": 68, "reserveFloorPct": 24 },
+        { "hour": "10:00", "socPct": 66, "reserveFloorPct": 24 },
+        { "hour": "14:00", "socPct": 64, "reserveFloorPct": 24 },
+        { "hour": "18:00", "socPct": 69, "reserveFloorPct": 24 },
+        { "hour": "22:00", "socPct": 72, "reserveFloorPct": 24 }
+      ],
+      "exportPlan": [
+        { "window": "16:00", "plannedKw": 108, "availableKw": 148 },
+        { "window": "17:00", "plannedKw": 132, "availableKw": 148 },
+        { "window": "18:00", "plannedKw": 96, "availableKw": 140 }
+      ]
+    },
+    "modules": [
+      {
+        "moduleKey": "consumption-forecasting-optimization",
+        "name": "Consumption Forecasting & Optimization",
+        "nameZhTw": "用電預測與優化",
+        "currentPosture": "Demand posture aligned",
+        "forecast": "Peak window is covered by the current HVAC and storage plan.",
+        "risk": "Savings opportunity intact",
+        "recommendedAction": "Keep the current optimization cadence.",
+        "owner": "Facilities operations",
+        "cadence": "30-minute demand plan",
+        "metrics": {
+          "actualDemandKw": 684,
+          "forecastDemandKw": 698,
+          "peakDemandKw": 802,
+          "expectedSavingsUsd": 118,
+          "demandResponseReady": true
+        }
+      },
+      {
+        "moduleKey": "sell-power-forecasting-management",
+        "name": "Sell-Power Forecasting & Management",
+        "nameZhTw": "售電預測與管理",
+        "currentPosture": "Export posture ready",
+        "forecast": "The expected export window remains open for the next cycle.",
+        "risk": "Low settlement friction",
+        "recommendedAction": "Proceed with the current market plan.",
+        "owner": "Market operations",
+        "cadence": "Hourly nomination review",
+        "metrics": {
+          "exportCommittedKw": 132,
+          "exportAvailableKw": 148,
+          "expectedRevenueUsd": 241,
+          "nominationStatus": "Cleared"
+        }
+      }
+    ],
+    "alerts": [],
+    "reports": [
+      {
+        "id": "daily-ops-brief",
+        "type": "daily",
+        "title": "Daily operations brief",
+        "titleZhTw": "每日營運簡報",
+        "status": "ready",
+        "updated": "12m ago",
+        "purpose": "Capture the normal operating handoff for alarms, posture, and the next operator checkpoint.",
+        "includes": [
+          "HVAC and EMS posture summary",
+          "Next operator checkpoint",
+          "Short note on any pending review"
+        ],
+        "decisionCue": "Does the site remain ready for routine dispatch and reporting?"
+      }
+    ],
+    "visualizations": [
+      {
+        "id": "overview-posture-strip",
+        "type": "status-strip",
+        "title": "Module posture strip",
+        "dataKey": "modules",
+        "tab": "overview"
+      }
+    ]
+  }
+]

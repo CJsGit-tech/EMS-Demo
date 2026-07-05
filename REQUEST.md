@@ -1,24 +1,5 @@
-# REQUEST
+# Request Context
 
-## 內部管理
+Canonical request and EMS scope context lives in [docs/context/platform/REQUEST.md](docs/context/platform/REQUEST.md).
 
-- 工務管理系統
-- 工務管理與 ERP 對接
-- Server 管理及內部資料優化
-- 報表、單據、文件產生自動化
-
-## 產品對接
-
-- 工地管理
-- EMS 整合平台
-- 工地管理與 EMS 銜接
-- IOT 與後端軟硬體及團隊整合
-
-## EMS
-
-- 發電預測與優化
-- 用電預測與優化
-- 售電預測與管理
-- 雙向充電樁商業模式管理預測
-- 移動式雙向充電樁
-- 能源資源商品化庫存管理
+This root file is intentionally kept as a compatibility pointer for tools and prompts that reference `REQUEST.md` at the repository root.

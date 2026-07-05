@@ -7,12 +7,12 @@ import {
   Building2,
   CheckCircle2,
   Gauge,
-  Globe,
   MapPin,
   Minus,
   Moon,
   Package,
   Plus,
+  Search,
   Sun,
   ThermometerSun,
   Truck,
@@ -24,6 +24,7 @@ import { startTransition, useDeferredValue, useEffect, useLayoutEffect, useMemo,
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
 import worldAtlas from "world-atlas/countries-110m.json";
 import { createTranslator, i18nConfig } from "./i18nConfig";
+import { buildSiteWorkspace } from "./siteWorkspaceContent";
 
 const workflowGroups = [
   { label: "發電預測與優化", icon: Zap },
@@ -324,118 +325,14 @@ const systemModules = workflowGroups.map((workflow, index) => ({
   cadence: ["15 min", "30 min", "Hourly", "Daily"][index % 4],
 }));
 
-const siteActivity = [
-  { site: "Taipei Hub", event: "HVAC drift rule assigned to Chia-Hao Lin", time: "9m ago" },
-  { site: "Arizona Array", event: "Temporary dispatch cap applied", time: "17m ago" },
-  { site: "Rotterdam Port", event: "Sell-power forecast cleared for evening review", time: "22m ago" },
-  { site: "Tokyo Campus", event: "Peak shaving window prepared", time: "31m ago" },
-];
-
 const siteTabs = [
   { id: "overview", labelKey: "overview" },
+  { id: "devices", labelKey: "devices" },
   { id: "ems", labelKey: "ems" },
   { id: "reports", labelKey: "reports" },
-  { id: "dev", labelKey: "dev" },
+  { id: "alerts", labelKey: "alerts" },
+  { id: "site", labelKey: "siteTab" },
 ];
-
-const reportBlueprints = [
-  {
-    id: "daily-operations",
-    cadence: "Daily",
-    title: "Daily operations brief",
-    category: "Operations",
-    status: "Ready",
-    summary:
-      "Shift handoff summary covering active alarms, HVAC exceptions, EMS posture, and the next operator decision before the next dispatch window.",
-    metrics: [
-      { label: "HVAC uptime", value: "98.4%", trend: "+0.6%", tone: "healthy" },
-      { label: "Dispatch confidence", value: "92%", trend: "Stable", tone: "healthy" },
-      { label: "Open alarms", value: "0", trend: "No escalation", tone: "healthy" },
-    ],
-    trends: [
-      { label: "Load forecast", value: "Within plan", detail: "Demand stayed inside the expected band through the last 6 hours." },
-      { label: "Storage reserve", value: "Ready", detail: "Reserve margin remains above the release threshold for evening support." },
-    ],
-    modules: ["用電預測與優化", "售電預測與管理"],
-  },
-  {
-    id: "weekly-ems",
-    cadence: "Weekly",
-    title: "EMS optimization review",
-    category: "EMS",
-    status: "Review",
-    summary:
-      "Weekly readout of forecasting quality, charging posture, inventory exposure, and any workflow that needs manager approval before the next planning cycle.",
-    metrics: [
-      { label: "Forecast accuracy", value: "94.1%", trend: "+1.3%", tone: "healthy" },
-      { label: "Curtailment capture", value: "87%", trend: "On target", tone: "watch" },
-      { label: "Inventory risk", value: "Low", trend: "Contained", tone: "healthy" },
-    ],
-    trends: [
-      { label: "Generation optimization", value: "Improving", detail: "Solar and battery scheduling improved after last model retune." },
-      { label: "Sell-power readiness", value: "1 open check", detail: "One market nomination still needs reconciliation before release." },
-    ],
-    modules: ["發電預測與優化", "售電預測與管理", "能源資源商品化庫存管理"],
-  },
-  {
-    id: "settlement-pack",
-    cadence: "Settlement",
-    title: "Commercial settlement pack",
-    category: "Reports",
-    status: "Draft",
-    summary:
-      "Site-specific commercial package for revenue posture, charger utilization, export commitments, and document artifacts used in settlement or partner review.",
-    metrics: [
-      { label: "Revenue capture", value: "NT$ 1.28M", trend: "+4.2%", tone: "healthy" },
-      { label: "Bidirectional utilization", value: "68%", trend: "Rising", tone: "watch" },
-      { label: "Document readiness", value: "3 of 4", trend: "One pending", tone: "critical" },
-    ],
-    trends: [
-      { label: "Commercial inventory", value: "Balanced", detail: "Available energy-product inventory remains within the weekly plan." },
-      { label: "Partner paperwork", value: "Pending sign-off", detail: "One approval item remains before the settlement packet can be issued." },
-    ],
-    modules: ["雙向充電樁", "移動式雙向充電樁", "能源資源商品化庫存管理"],
-  },
-];
-
-function buildSiteReports(site) {
-  return reportBlueprints.map((report, index) => ({
-    ...report,
-    id: `${site.id}-${report.id}`,
-    updated: index === 0 ? site.updatedAt : index === 1 ? "Today 09:10" : "Yesterday 18:40",
-    status: site.status === "critical" && index === 0 ? "Attention" : report.status,
-    metrics: report.metrics.map((metric) => {
-      if (metric.label === "Open alarms") {
-        return {
-          ...metric,
-          value: String(site.alerts),
-          trend: site.alerts === 0 ? "No escalation" : `${site.alerts} need review`,
-          tone: site.alerts === 0 ? "healthy" : site.status === "critical" ? "critical" : "watch",
-        };
-      }
-
-      if (metric.label === "Dispatch confidence") {
-        return {
-          ...metric,
-          value: site.status === "critical" ? "76%" : site.status === "watch" ? "84%" : "92%",
-          trend: site.status === "critical" ? "Reduced" : site.status === "watch" ? "Watching drift" : "Stable",
-          tone: site.status === "critical" ? "critical" : site.status === "watch" ? "watch" : "healthy",
-        };
-      }
-
-      if (metric.label === "Document readiness") {
-        return {
-          ...metric,
-          value: site.status === "critical" ? "2 of 4" : site.status === "watch" ? "3 of 4" : "4 of 4",
-          trend: site.status === "critical" ? "Needs follow-up" : site.status === "watch" ? "One pending" : "Complete",
-          tone: site.status === "critical" ? "critical" : site.status === "watch" ? "watch" : "healthy",
-        };
-      }
-
-      return metric;
-    }),
-  }));
-}
 
 let switchTimer = 0;
 let noticeTimer = 0;
@@ -516,6 +413,165 @@ function getCountryZoom(sites) {
   return 5.2;
 }
 
+const chartPalette = ["primary", "secondary", "tertiary"];
+
+function getChartNumericValues(chart) {
+  return (chart.data ?? []).flatMap((point) => (
+    (chart.yFields ?? [])
+      .map((field) => Number(point[field]))
+      .filter((value) => Number.isFinite(value))
+  ));
+}
+
+function getChartBounds(chart) {
+  const values = getChartNumericValues(chart);
+
+  if (values.length === 0) {
+    return { min: 0, max: 1 };
+  }
+
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const padding = Math.max((rawMax - rawMin) * 0.18, chart.unit === "°C" ? 0.5 : 1);
+  const min = chart.unit === "°C" ? rawMin - padding : Math.max(0, rawMin - padding);
+  const max = rawMax + padding;
+
+  return max <= min ? { min: min - 1, max: max + 1 } : { min, max };
+}
+
+function formatChartValue(value, unit) {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+
+  const precision = unit === "°C" ? 1 : 0;
+  return `${value.toFixed(precision)}${unit ? ` ${unit}` : ""}`;
+}
+
+function buildLinePath(data, field, xField, min, max) {
+  const width = 640;
+  const height = 220;
+  const padding = { top: 20, right: 18, bottom: 34, left: 42 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const denominator = Math.max(data.length - 1, 1);
+  const range = max - min || 1;
+
+  return data
+    .map((point, index) => {
+      const rawValue = Number(point[field]);
+      const value = Number.isFinite(rawValue) ? rawValue : min;
+      const x = padding.left + (index / denominator) * plotWidth;
+      const y = padding.top + ((max - value) / range) * plotHeight;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function SignalLineChart({ chart }) {
+  const data = chart.data ?? [];
+  const { min, max } = getChartBounds(chart);
+  const firstLabel = data[0]?.[chart.xField] ?? "";
+  const lastLabel = data[data.length - 1]?.[chart.xField] ?? "";
+
+  return (
+    <svg className="signal-chart-svg" viewBox="0 0 640 220" role="img" aria-label={chart.title} preserveAspectRatio="none">
+      <line className="signal-grid-line" x1="42" y1="36" x2="622" y2="36" />
+      <line className="signal-grid-line" x1="42" y1="110" x2="622" y2="110" />
+      <line className="signal-grid-line" x1="42" y1="184" x2="622" y2="184" />
+      <text className="signal-axis-label" x="42" y="18">{formatChartValue(max, chart.unit)}</text>
+      <text className="signal-axis-label" x="42" y="208">{firstLabel}</text>
+      <text className="signal-axis-label" x="588" y="208">{lastLabel}</text>
+      {(chart.yFields ?? []).map((field, index) => (
+        <path
+          key={`${chart.id}-${field}`}
+          className={`signal-line signal-line-${chartPalette[index] ?? "primary"} ${index > 0 ? "is-reference" : ""}`}
+          d={buildLinePath(data, field, chart.xField, min, max)}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function SignalBarChart({ chart }) {
+  const data = chart.data ?? [];
+  const { max } = getChartBounds(chart);
+  const fields = chart.yFields ?? [];
+  const width = 640;
+  const height = 220;
+  const padding = { top: 20, right: 18, bottom: 34, left: 42 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const groupWidth = plotWidth / Math.max(data.length, 1);
+  const barWidth = Math.min(34, groupWidth / Math.max(fields.length + 1, 2));
+
+  return (
+    <svg className="signal-chart-svg" viewBox="0 0 640 220" role="img" aria-label={chart.title} preserveAspectRatio="none">
+      <line className="signal-grid-line" x1="42" y1="36" x2="622" y2="36" />
+      <line className="signal-grid-line" x1="42" y1="110" x2="622" y2="110" />
+      <line className="signal-grid-line" x1="42" y1="184" x2="622" y2="184" />
+      <text className="signal-axis-label" x="42" y="18">{formatChartValue(max, chart.unit)}</text>
+      {data.map((point, pointIndex) => {
+        const groupX = padding.left + pointIndex * groupWidth + groupWidth / 2;
+        return (
+          <g key={`${chart.id}-${point[chart.xField]}`}>
+            {fields.map((field, fieldIndex) => {
+              const value = Number(point[field]);
+              const barHeight = (Number.isFinite(value) ? value : 0) / Math.max(max, 1) * plotHeight;
+              const x = groupX - ((fields.length * barWidth) / 2) + fieldIndex * barWidth;
+              const y = padding.top + plotHeight - barHeight;
+              return (
+                <rect
+                  key={`${chart.id}-${point[chart.xField]}-${field}`}
+                  className={`signal-bar signal-bar-${chartPalette[fieldIndex] ?? "primary"}`}
+                  x={x}
+                  y={y}
+                  width={Math.max(barWidth - 4, 8)}
+                  height={Math.max(barHeight, 2)}
+                  rx="4"
+                />
+              );
+            })}
+            <text className="signal-axis-label" x={groupX - 18} y="208">{point[chart.xField]}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function SignalPanel({ chart, compact = false }) {
+  if (!chart || !Array.isArray(chart.data) || chart.data.length === 0) {
+    return null;
+  }
+
+  const latestPoint = chart.data[chart.data.length - 1];
+  const primaryField = chart.yFields?.[0];
+  const latestValue = primaryField ? Number(latestPoint?.[primaryField]) : NaN;
+  const isBarChart = chart.type?.includes("bar");
+
+  return (
+    <article className={`signal-panel ${compact ? "is-compact" : ""}`}>
+      <header className="signal-panel-header">
+        <div>
+          <span>{chart.kindLabel}</span>
+          <h3>{chart.title}</h3>
+        </div>
+        {primaryField ? <strong>{formatChartValue(latestValue, chart.unit)}</strong> : null}
+      </header>
+      {isBarChart ? <SignalBarChart chart={chart} /> : <SignalLineChart chart={chart} />}
+      <footer className="signal-legend">
+        {(chart.yFields ?? []).map((field, index) => (
+          <span key={`${chart.id}-${field}`}>
+            <i className={`legend-swatch legend-swatch-${chartPalette[index] ?? "primary"}`} />
+            {chart.yLabels?.[field] ?? field}
+          </span>
+        ))}
+      </footer>
+    </article>
+  );
+}
+
 function pushRoute(fragment) {
   if (window.location.hash !== `#${fragment}`) {
     window.history.pushState(null, "", `#${fragment}`);
@@ -550,18 +606,81 @@ function App() {
   const [mapZoomOffset, setMapZoomOffset] = useState(0);
   const [siteTab, setSiteTab] = useState("overview");
   const [selectedReportId, setSelectedReportId] = useState(null);
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportCadenceFilter, setReportCadenceFilter] = useState("all");
   const [notice, setNotice] = useState("");
   const [locale, setLocale] = useState(() => readStoredPreference("verde-locale", "locale", i18nConfig.defaultLocale));
+  const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => readStoredPreference("verde-theme", "theme", "light"));
   const searchInputRef = useRef(null);
   const mapStageRef = useRef(null);
+  const localeMenuRef = useRef(null);
   const deferredSearch = useDeferredValue(searchValue);
   const t = useMemo(() => createTranslator(locale), [locale]);
 
   const selectedSite = siteData.find((site) => site.id === selectedSiteId) ?? siteData[0];
+  const activeLocaleOption = i18nConfig.locales.find((language) => language.id === locale) ?? i18nConfig.locales[0];
   const hasExplicitSiteSelection = Boolean(selectedSiteId);
-  const siteReports = useMemo(() => buildSiteReports(selectedSite), [selectedSite]);
-  const activeReport = siteReports.find((report) => report.id === selectedReportId) ?? siteReports[0];
+  const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale), [locale, selectedSite]);
+  const siteReports = siteWorkspace.reports;
+  const siteAlerts = siteWorkspace.alerts ?? [];
+  const alertSummaryMetrics = useMemo(() => {
+    const criticalCount = siteAlerts.filter((alert) => alert.severity === "critical").length;
+    const warningCount = siteAlerts.filter((alert) => alert.severity === "watch").length;
+    const ownerCount = new Set(siteAlerts.map((alert) => alert.owner)).size;
+
+    return [
+      { id: "open", label: t("openAlertsMetric"), value: String(siteAlerts.length), tone: siteAlerts.length > 0 ? "watch" : "healthy" },
+      { id: "critical", label: t("criticalAlertsMetric"), value: String(criticalCount), tone: criticalCount > 0 ? "critical" : "healthy" },
+      { id: "warning", label: t("warningAlertsMetric"), value: String(warningCount), tone: warningCount > 0 ? "watch" : "healthy" },
+      { id: "owners", label: t("alertOwnersMetric"), value: String(ownerCount), tone: "neutral" },
+    ];
+  }, [siteAlerts, t]);
+  const activeReport = selectedReportId ? siteReports.find((report) => report.id === selectedReportId) ?? null : null;
+  const filteredSiteReports = useMemo(() => {
+    const query = reportSearch.trim().toLowerCase();
+
+    return siteReports.filter((report) => {
+      const matchesCadence = reportCadenceFilter === "all" || report.type === reportCadenceFilter;
+      const searchableReport = [
+        report.title,
+        report.cadence,
+        report.category,
+        report.status,
+        report.updated,
+        report.purpose,
+        report.decisionCue,
+      ].join(" ").toLowerCase();
+
+      return matchesCadence && (query.length === 0 || searchableReport.includes(query));
+    });
+  }, [reportCadenceFilter, reportSearch, siteReports]);
+  const reportFilterOptions = useMemo(() => [
+    { id: "all", label: t("allReports") },
+    { id: "daily", label: t("dailyReports") },
+    { id: "monthly", label: t("monthlyReports") },
+  ], [t]);
+  const connectedWorkflowCount = siteWorkspace.modules.length;
+  const siteDeviceSummary = siteWorkspace.devices?.summary ?? [];
+  const siteDeviceGroups = siteWorkspace.devices?.groups ?? [];
+  const overviewMetrics = siteWorkspace.overview.metrics ?? [];
+  const overviewNextStops = siteWorkspace.overview.nextStops ?? [];
+  const siteProfile = siteWorkspace.site ?? null;
+  const overviewSignals = siteWorkspace.charts?.overview ?? [];
+  const deviceSignals = siteWorkspace.charts?.devices ?? [];
+  const emsSignals = siteWorkspace.charts?.ems ?? [];
+  const siteModuleDetails = siteWorkspace.modules.map((module) => {
+    const baseModule = systemModules.find((systemModule) => systemModule.label === module.workflow);
+    return {
+      ...module,
+      icon: baseModule?.icon ?? Gauge,
+    };
+  });
+  const systemPostureKey = selectedSite.status === "critical"
+    ? "systemPostureCritical"
+    : selectedSite.status === "watch"
+      ? "systemPostureWatch"
+      : "systemPostureHealthy";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -575,13 +694,38 @@ function App() {
   }, [locale]);
 
   useEffect(() => {
+    function handlePointerDown(event) {
+      if (!localeMenuRef.current?.contains(event.target)) {
+        setIsLocaleMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsLocaleMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
     function syncRoute() {
       const route = window.location.hash.replace("#", "");
       if (route.startsWith("site/")) {
-        const siteId = route.split("/")[1];
+        const [, siteId, requestedTab] = route.split("/");
         if (siteData.some((site) => site.id === siteId)) {
           setSelectedSiteId(siteId);
           setActiveScreen("site-detail");
+          if (siteTabs.some((tab) => tab.id === requestedTab)) {
+            setSiteTab(requestedTab);
+          }
         }
         return;
       }
@@ -601,7 +745,7 @@ function App() {
       if (current && siteReports.some((report) => report.id === current)) {
         return current;
       }
-      return siteReports[0]?.id ?? null;
+      return null;
     });
   }, [siteReports]);
 
@@ -898,7 +1042,7 @@ function App() {
     setDrillCountry(null);
     setSiteTab("overview");
     setActiveScreen("site-detail");
-    pushRoute(`site/${siteId}`);
+    pushRoute(`site/${siteId}/overview`);
   }
 
   function handleNavigate(screenId) {
@@ -1017,22 +1161,60 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-mark" aria-label="Verde EMS">
-          <span className="brand-shield">V</span>
-          <strong>{t("appName")}</strong>
-        </div>
+      <header className={`topbar ${activeScreen === "site-detail" ? "is-detail" : ""}`}>
+        {activeScreen === "site-detail" ? (
+          <button
+            type="button"
+            className="back-button topbar-return-button"
+            onClick={() => handleNavigate("overview")}
+          >
+            <ArrowRight size={14} />
+            {t("backToPortfolio")}
+          </button>
+        ) : (
+          <div className="brand-mark" aria-label="Verde EMS">
+            <span className="brand-shield">V</span>
+            <strong>{t("appName")}</strong>
+          </div>
+        )}
+        {activeScreen === "site-detail" ? (
+          <div className="topbar-site-context" aria-label={selectedSite.name}>
+            <h1>{selectedSite.name}</h1>
+          </div>
+        ) : null}
         <div className="top-actions">
-          <label className="locale-dropdown">
-            <Globe size={15} aria-hidden="true" />
-            <select value={locale} onChange={(event) => setLocale(event.target.value)} aria-label={t("languageLabel")}>
-              {i18nConfig.locales.map((language) => (
-                <option key={language.id} value={language.id}>
-                  {language.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div ref={localeMenuRef} className="locale-menu">
+            <button
+              type="button"
+              className={`locale-token-button ${isLocaleMenuOpen ? "is-open" : ""}`}
+              aria-label={t("languageLabel")}
+              aria-haspopup="menu"
+              aria-expanded={isLocaleMenuOpen}
+              onClick={() => setIsLocaleMenuOpen((current) => !current)}
+            >
+              <span className="locale-token" aria-hidden="true">{activeLocaleOption.label}</span>
+            </button>
+            {isLocaleMenuOpen ? (
+              <div className="locale-menu-panel" role="menu" aria-label={t("languageLabel")}>
+                {i18nConfig.locales.map((language) => (
+                  <button
+                    key={language.id}
+                    type="button"
+                    role="menuitemradio"
+                    className={language.id === locale ? "is-active" : ""}
+                    aria-checked={language.id === locale}
+                    onClick={() => {
+                      setLocale(language.id);
+                      setIsLocaleMenuOpen(false);
+                    }}
+                  >
+                    <span>{language.label}</span>
+                    <strong>{language.name}</strong>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <button
             className="icon-button"
             type="button"
@@ -1062,41 +1244,17 @@ function App() {
       </header>
 
       <main className="workspace" id="main-content">
-        <div className="workspace-toolbar">
-          <div>
-            {activeScreen === "site-detail" ? (
-              <button type="button" className="back-button" onClick={() => handleNavigate("overview")}>
-                <ArrowRight size={14} />
-                {t("backToPortfolio")}
-              </button>
-            ) : null}
-            {activeScreen === "overview" ? (
+        {activeScreen === "overview" ? (
+          <div className="workspace-toolbar">
+            <div>
               <div className="overview-kicker">
                 <h1 className="sr-only">{screenMeta.title}</h1>
                 <span>{screenMeta.title}</span>
                 <strong>{filteredSites.length} {filteredSites.length === 1 ? t("portfolioSite") : t("portfolioSites")}</strong>
               </div>
-            ) : (
-              <>
-                <h1>{screenMeta.title}</h1>
-                <p>{screenMeta.description}</p>
-              </>
-            )}
+            </div>
           </div>
-          <div className="toolbar-actions">
-            {activeScreen === "site-detail" ? (
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => announce(t("exportQueued"))}
-              >
-                <Plus size={15} />
-                <span className="wide-label">{t("exportSiteReport")}</span>
-                <span className="narrow-label">{t("exportShort")}</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
+        ) : null}
         <div className="app-notice" aria-live="polite" aria-atomic="true">
           {notice}
         </div>
@@ -1495,9 +1653,9 @@ function App() {
                     type="button"
                     className={`module-row ${isConnected ? "is-connected" : ""}`}
                     onClick={() => {
-                      setSiteTab("ems");
+                      setSiteTab("devices");
                       setActiveScreen("site-detail");
-                      pushRoute(`site/${selectedSite.id}`);
+                      pushRoute(`site/${selectedSite.id}/devices`);
                     }}
                   >
                     <Icon size={18} />
@@ -1545,60 +1703,22 @@ function App() {
 
         {activeScreen === "site-detail" ? (
           <section className="site-workspace">
-            <aside className="site-summary-card">
-              <div className="site-summary-header">
-                <span className={`status-label ${selectedSite.status}`}>
-                  {t(statusMeta[selectedSite.status].labelKey)}
-                </span>
-                <span className="screen-count">{selectedSite.code}</span>
-              </div>
-              <h2>{selectedSite.name}</h2>
-              <p>{selectedSite.city}, {selectedSite.country}</p>
-              <dl className="drawer-status">
-                <div>
-                  <dt>{t("hvacSystems")}</dt>
-                  <dd>{selectedSite.hvac}</dd>
-                </div>
-                <div>
-                  <dt>{t("emsStatus")}</dt>
-                  <dd>{selectedSite.ems}</dd>
-                </div>
-                <div>
-                  <dt>{t("openAlarms")}</dt>
-                  <dd>{selectedSite.alerts}</dd>
-                </div>
-                <div>
-                  <dt>{t("lastUpdate")}</dt>
-                  <dd>{selectedSite.updatedAt}</dd>
-                </div>
-              </dl>
-              <div className="site-summary-note">
-                <span>{t("decisionSummary")}</span>
-                <strong>{selectedSite.focus}</strong>
-                <p>{selectedSite.note}</p>
-              </div>
-              <div className="site-summary-stack">
-                <div>
-                  <span>{t("assignedOwner")}</span>
-                  <strong>{selectedSite.contact}</strong>
-                </div>
-                <div>
-                  <span>{t("onlineDevices")}</span>
-                  <strong>{selectedSite.deviceCount}/64</strong>
-                </div>
-              </div>
-            </aside>
-
             <article className="site-detail-panel">
               <div className="site-tabs" role="tablist" aria-label={`${selectedSite.name} sections`}>
                 {siteTabs.map((tab) => (
                   <button
                     key={tab.id}
+                    id={`${selectedSite.id}-${tab.id}-tab`}
                     type="button"
                     role="tab"
                     className={siteTab === tab.id ? "is-active" : ""}
                     aria-selected={siteTab === tab.id}
-                    onClick={() => setSiteTab(tab.id)}
+                    aria-controls={`${selectedSite.id}-${tab.id}-panel`}
+                    tabIndex={siteTab === tab.id ? 0 : -1}
+                    onClick={() => {
+                      setSiteTab(tab.id);
+                      pushRoute(`site/${selectedSite.id}/${tab.id}`);
+                    }}
                   >
                     {t(tab.labelKey)}
                   </button>
@@ -1606,217 +1726,543 @@ function App() {
               </div>
 
               {siteTab === "overview" ? (
-                <div className="site-tab-panel">
-                  <section className="detail-hero">
+                <div
+                  id={`${selectedSite.id}-overview-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-overview-tab`}
+                >
+                  <section className="workspace-hero workspace-hero-compact">
                     <div>
-                      <span className="section-kicker">{t("primaryFocus")}</span>
-                      <h2>{selectedSite.focus}</h2>
-                      <p>{selectedSite.note}</p>
+                      <span className="section-kicker">{t("overviewWorkspaceKicker")}</span>
+                      <h2>{siteWorkspace.overview.headline}</h2>
                     </div>
-                    <button type="button" className="open-site-button">
-                      {t("exportSiteReport")}
-                      <ArrowRight size={15} />
-                    </button>
+                    <p>{siteWorkspace.overview.summary}</p>
+                    <div className="workspace-inline-meta">
+                      <div>
+                        <span>{t("primaryOwner")}</span>
+                        <strong>{siteWorkspace.overview.meta?.owner ?? selectedSite.contact}</strong>
+                      </div>
+                      <div>
+                        <span>{t("lastUpdate")}</span>
+                        <strong>{siteWorkspace.overview.meta?.updatedAt ?? selectedSite.updatedAt}</strong>
+                      </div>
+                      <div>
+                        <span>{t("currentPosture")}</span>
+                        <strong>{siteWorkspace.overview.meta?.posture ?? t(systemPostureKey)}</strong>
+                      </div>
+                    </div>
                   </section>
 
-                  <div className="summary-grid summary-grid-tight">
-                    <div>
-                      <span>{t("hvacSystems")}</span>
-                      <strong>{selectedSite.hvac}</strong>
-                      <small>Current operating posture</small>
-                    </div>
-                    <div>
-                      <span>{t("emsStatus")}</span>
-                      <strong>{selectedSite.ems}</strong>
-                      <small>Workflow readiness</small>
-                    </div>
-                    <div>
-                      <span>{t("openAlarms")}</span>
-                      <strong>{selectedSite.alerts}</strong>
-                      <small>Requires operator review</small>
-                    </div>
-                    <div>
-                      <span>{t("onlineDevices")}</span>
-                      <strong>{selectedSite.deviceCount}/64</strong>
-                      <small>Connected HVAC endpoints</small>
-                    </div>
-                  </div>
+                  {overviewSignals.length > 0 ? (
+                    <section className="signal-dashboard signal-dashboard-compact" aria-label={t("dashboardSignalsTitle")}>
+                      {overviewSignals.slice(0, 2).map((chart) => (
+                        <SignalPanel key={`${selectedSite.id}-${chart.id}`} chart={chart} compact />
+                      ))}
+                    </section>
+                  ) : null}
 
-                  <div className="detail-dual-grid">
-                    <section className="detail-section">
+                  <section className="workspace-card workspace-card-muted">
+                    <header className="detail-section-header">
+                      <div>
+                        <span className="section-kicker">{t("decisionSummary")}</span>
+                        <h3>{t("overviewMetricsTitle")}</h3>
+                      </div>
+                    </header>
+                    <div className="summary-grid site-overview-metrics">
+                      {overviewMetrics.map((item) => (
+                        <button
+                          key={`${selectedSite.id}-${item.label}`}
+                          type="button"
+                          className="summary-grid-button"
+                          onClick={() => {
+                            setSiteTab(item.tab);
+                            pushRoute(`site/${selectedSite.id}/${item.tab}`);
+                          }}
+                        >
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                          <small>{item.hint}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="workspace-card workspace-card-muted">
+                    <header className="detail-section-header">
+                      <div>
+                        <span className="section-kicker">{t("nextActionLabel")}</span>
+                        <h3>{t("nextStopsTitle")}</h3>
+                      </div>
+                    </header>
+                    <div className="next-stop-list">
+                      {overviewNextStops.map((item) => (
+                        <button
+                          key={`${selectedSite.id}-${item.label}`}
+                          type="button"
+                          className="next-stop-row"
+                          onClick={() => {
+                            setSiteTab(item.tab);
+                            pushRoute(`site/${selectedSite.id}/${item.tab}`);
+                          }}
+                        >
+                          <span>
+                            <strong>{item.label}</strong>
+                            <small>{item.detail}</small>
+                          </span>
+                          <ArrowRight size={15} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {siteTab === "devices" ? (
+                <div
+                  id={`${selectedSite.id}-devices-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-devices-tab`}
+                >
+                  <section className="workspace-intro workspace-intro-subtle">
+                    <div>
+                      <span className="section-kicker">{t("devices")}</span>
+                      <h2>{t("devicesTitle")}</h2>
+                    </div>
+                    <p>{t("devicesBody")}</p>
+                  </section>
+
+                  <div className="devices-workspace devices-workspace-quiet">
+                    <section className="workspace-card workspace-card-muted workspace-card-compact">
                       <header className="detail-section-header">
                         <div>
-                          <span className="section-kicker">{t("decisionSummary")}</span>
-                          <h3>Operator brief</h3>
+                          <span className="section-kicker">{t("systemPosture")}</span>
+                          <h3>{t("siteReadinessTitle")}</h3>
                         </div>
                       </header>
-                      <div className="insight-list">
-                        <article>
-                          <span>Immediate action</span>
-                          <strong>{selectedSite.focus}</strong>
-                          <p>Use this site as the next operator checkpoint before the next EMS planning cycle.</p>
-                        </article>
-                        <article>
-                          <span>Commercial posture</span>
-                          <strong>{selectedSite.ems === "Normal" ? "Ready for review" : "Needs manager check"}</strong>
-                          <p>Settlement and dispatch work should stay tied to the site report trail instead of portfolio-level navigation.</p>
-                        </article>
+                      <div className="summary-grid summary-grid-flat">
+                        {siteDeviceSummary.map((item) => (
+                          <div key={`${selectedSite.id}-${item.label}`}>
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                            <small>{item.hint}</small>
+                          </div>
+                        ))}
                       </div>
                     </section>
 
-                    <section className="detail-section">
+                    {deviceSignals.length > 0 ? (
+                      <section className="signal-dashboard" aria-label={t("deviceSignalsTitle")}>
+                        {deviceSignals.map((chart) => (
+                          <SignalPanel key={`${selectedSite.id}-${chart.id}`} chart={chart} />
+                        ))}
+                      </section>
+                    ) : null}
+
+                    <section className="workspace-card workspace-card-muted">
                       <header className="detail-section-header">
                         <div>
-                          <span className="section-kicker">Trend snapshot</span>
-                          <h3>Today</h3>
+                          <span className="section-kicker">{t("devices")}</span>
+                          <h3>{t("deviceGroupsTitle")}</h3>
                         </div>
+                        <p>{t("devicesTabBody")}</p>
                       </header>
-                      <div className="trend-stack">
-                        {activeReport.trends.map((item) => (
-                          <article key={`${selectedSite.id}-${item.label}`}>
-                            <div>
-                              <span>{item.label}</span>
-                              <strong>{item.value}</strong>
-                            </div>
-                            <p>{item.detail}</p>
-                          </article>
-                        ))}
-                      </div>
+                      {siteDeviceGroups.length === 0 ? (
+                        <div className="empty-state">
+                          <strong>{t("noDeviceGroupsTitle")}</strong>
+                          <span>{t("noDeviceGroupsBody")}</span>
+                        </div>
+                      ) : (
+                        <div className="module-surface-list">
+                          {siteDeviceGroups.map((group) => {
+                            const Icon = group.id === "hvac"
+                              ? ThermometerSun
+                              : group.id === "storage"
+                                ? BatteryCharging
+                                : group.id === "chargers"
+                                  ? Truck
+                                  : Package;
+                            return (
+                              <article
+                                key={`${selectedSite.id}-${group.id}`}
+                                className="module-surface-row module-surface-row-quiet"
+                              >
+                                <div className="module-surface-main">
+                                  <div className="module-surface-header">
+                                    <Icon size={18} />
+                                    <div>
+                                      <strong>{group.name}</strong>
+                                      <p>{group.status}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="module-surface-facts">
+                                  <div>
+                                    <span>{t("devicesSummaryLabel")}</span>
+                                    <strong>{group.summary}</strong>
+                                  </div>
+                                  <div>
+                                    <span>{t("devicesDetailLabel")}</span>
+                                    <strong>{group.detail}</strong>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
                     </section>
                   </div>
                 </div>
               ) : null}
 
               {siteTab === "ems" ? (
-                <div className="site-tab-panel">
-                  <section className="detail-section">
+                <div
+                  id={`${selectedSite.id}-ems-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-ems-tab`}
+                >
+                  <section className="workspace-intro workspace-intro-subtle">
+                    <div>
+                      <span className="section-kicker">{t("ems")}</span>
+                      <h2>{t("emsTabTitle")}</h2>
+                    </div>
+                    <p>{t("emsTabBody")}</p>
+                  </section>
+
+                  {emsSignals.length > 0 ? (
+                    <section className="signal-dashboard signal-dashboard-featured" aria-label={t("emsSignalsTitle")}>
+                      {emsSignals.map((chart) => (
+                        <SignalPanel key={`${selectedSite.id}-${chart.id}`} chart={chart} />
+                      ))}
+                    </section>
+                  ) : null}
+
+                  <section className="workspace-card workspace-card-muted">
                     <header className="detail-section-header">
                       <div>
-                        <span className="section-kicker">{t("ems")}</span>
-                        <h2>{t("emsWorkflows")}</h2>
+                        <span className="section-kicker">{t("enabledModulesTitle")}</span>
+                        <h3>{t("emsWorkflows")}</h3>
                       </div>
-                      <p>Site-connected modules stay visible here so operations managers can confirm readiness before they open a report.</p>
+                      <p>{t("enabledModulesBody", { count: connectedWorkflowCount })}</p>
                     </header>
+                    {siteModuleDetails.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>{t("noModulesTitle")}</strong>
+                        <span>{t("noModulesBody")}</span>
+                      </div>
+                    ) : (
+                      <div className="module-surface-list">
+                        {siteModuleDetails.map((module) => {
+                          const Icon = module.icon;
+                          return (
+                            <article
+                              key={`${selectedSite.id}-${module.workflow}`}
+                              className="module-surface-row"
+                            >
+                              <div className="module-surface-main">
+                                <div className="module-surface-header">
+                                  <Icon size={18} />
+                                  <div>
+                                    <strong>{module.name}</strong>
+                                    <p>{module.category}</p>
+                                  </div>
+                                </div>
+                                <p className="module-surface-brief">{module.current}</p>
+                              </div>
+                              <div className="module-command-surface">
+                                <div className="module-command-metrics">
+                                  {(module.commandMetrics ?? []).map((metric) => (
+                                    <div key={`${module.id}-${metric.key}`}>
+                                      <span>{metric.label}</span>
+                                      <strong>{metric.value}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="module-command-footer">
+                                  <span>
+                                    <small>{t("nextActionLabel")}</small>
+                                    <strong>{module.action}</strong>
+                                  </span>
+                                  <span>
+                                    <small>{t("riskLabel")}</small>
+                                    <strong>{module.risk}</strong>
+                                  </span>
+                                  <span>
+                                    <small>{t("assignedOwner")}</small>
+                                    <strong>{module.owner}</strong>
+                                  </span>
+                                  <span>
+                                    <small>{t("updateCadence")}</small>
+                                    <strong>{module.cadence}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
                   </section>
-                  <div className="workflow-grid compact detail-workflow-grid">
-                    {workflowGroups.map((workflow) => {
-                      const Icon = workflow.icon;
-                      const isConnected = selectedSite.workflows.includes(workflow.label);
-                      return (
-                        <button key={`${selectedSite.id}-${workflow.label}`} type="button" className={isConnected ? "is-connected" : ""}>
-                          <Icon size={18} />
-                          <span>{workflow.label}</span>
-                          <small>{isConnected ? t("enabledForSite") : t("availablePortfolio")}</small>
-                          <strong>{isConnected ? selectedSite.updatedAt : "Portfolio shared"}</strong>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : null}
 
               {siteTab === "reports" ? (
-                <div className="site-tab-panel">
-                  <section className="detail-section">
-                    <header className="detail-section-header">
-                      <div>
-                        <span className="section-kicker">{t("reports")}</span>
-                        <h2>{t("siteReports")}</h2>
+                <div
+                  id={`${selectedSite.id}-reports-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-reports-tab`}
+                >
+                  <div className="reports-workspace reports-workspace-table">
+                    {siteReports.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>{t("noReportsTitle")}</strong>
+                        <span>{t("noReportsBody")}</span>
                       </div>
-                      <p>{t("siteReportsBody")}</p>
-                    </header>
-                  </section>
-
-                  <div className="reports-workspace">
-                    <div className="document-list detail-report-list" role="list">
-                      {siteReports.map((report) => (
-                        <button
-                          key={report.id}
-                          type="button"
-                          className={activeReport?.id === report.id ? "is-active" : ""}
-                          onClick={() => setSelectedReportId(report.id)}
-                        >
-                          <span>
-                            <small>{report.cadence} · {report.category}</small>
-                            <strong>{report.title}</strong>
-                            <small>{t("updated")} {report.updated}</small>
-                          </span>
-                          <span className={`report-state ${report.status.toLowerCase().replaceAll(" ", "-")}`}>{report.status}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <article className="report-detail-card">
-                      <header className="report-detail-header">
-                        <div>
-                          <small>{activeReport.cadence} · {activeReport.category}</small>
-                          <h3>{activeReport.title}</h3>
-                        </div>
-                        <span className={`report-state ${activeReport.status.toLowerCase().replaceAll(" ", "-")}`}>{activeReport.status}</span>
-                      </header>
-                      <p>{activeReport.summary}</p>
-
-                      <div className="summary-grid summary-grid-tight">
-                        {activeReport.metrics.map((metric) => (
-                          <div key={`${activeReport.id}-${metric.label}`}>
-                            <span>{metric.label}</span>
-                            <strong>{metric.value}</strong>
-                            <small className={`metric-trend ${metric.tone}`}>{metric.trend}</small>
-                          </div>
-                        ))}
-                      </div>
-
-                      <section className="detail-section report-detail-section">
-                        <header className="detail-section-header">
+                    ) : (
+                      <section className="reports-table-shell" aria-label={t("siteReports")}>
+                        <header className="reports-toolbar">
                           <div>
-                            <span className="section-kicker">Trend notes</span>
-                            <h3>What changed</h3>
+                            <span className="section-kicker">{t("reports")}</span>
+                            <h2>{t("reportsTableTitle")}</h2>
+                            <p>{t("reportsTableCount", { count: filteredSiteReports.length })}</p>
+                          </div>
+                          <div className="reports-filter-controls">
+                            <label className="report-search-field">
+                              <Search size={16} aria-hidden="true" />
+                              <span className="sr-only">{t("searchReports")}</span>
+                              <input
+                                type="search"
+                                value={reportSearch}
+                                placeholder={t("searchReports")}
+                                onChange={(event) => setReportSearch(event.target.value)}
+                              />
+                            </label>
+                            <div className="report-filter-group" aria-label={t("reportFrequencyFilter")}>
+                              {reportFilterOptions.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={reportCadenceFilter === option.id ? "is-active" : ""}
+                                  onClick={() => setReportCadenceFilter(option.id)}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </header>
-                        <div className="trend-stack">
-                          {activeReport.trends.map((item) => (
-                            <article key={`${activeReport.id}-${item.label}`}>
-                              <div>
-                                <span>{item.label}</span>
-                                <strong>{item.value}</strong>
-                              </div>
-                              <p>{item.detail}</p>
-                            </article>
-                          ))}
-                        </div>
-                      </section>
 
-                      <section className="detail-section report-detail-section">
-                        <header className="detail-section-header">
-                          <div>
-                            <span className="section-kicker">Linked modules</span>
-                            <h3>EMS context</h3>
+                        {filteredSiteReports.length === 0 ? (
+                          <div className="empty-state">
+                            <strong>{t("noFilteredReportsTitle")}</strong>
+                            <span>{t("noFilteredReportsBody")}</span>
                           </div>
-                        </header>
-                        <div className="module-tag-list">
-                          {activeReport.modules.map((module) => (
-                            <span key={`${activeReport.id}-${module}`}>{module}</span>
-                          ))}
-                        </div>
+                        ) : (
+                          <div className="reports-table" role="table" aria-label={t("siteReports")}>
+                            <div className="reports-table-row reports-table-head" role="row">
+                              <span role="columnheader">{t("reportNameColumn")}</span>
+                              <span role="columnheader">{t("reportCadenceColumn")}</span>
+                              <span role="columnheader">{t("reportStatusColumn")}</span>
+                              <span role="columnheader">{t("reportDecisionColumn")}</span>
+                              <span role="columnheader">{t("reportActionsColumn")}</span>
+                            </div>
+                            {filteredSiteReports.map((report) => (
+                              <article
+                                key={report.id}
+                                className={`reports-table-row ${activeReport?.id === report.id ? "is-active" : ""}`}
+                                role="row"
+                              >
+                                <div className="report-title-cell" role="cell">
+                                  <strong>{report.title}</strong>
+                                  <small>{report.preview}</small>
+                                </div>
+                                <div role="cell">
+                                  <strong>{report.cadence}</strong>
+                                  <small>{report.category}</small>
+                                </div>
+                                <div role="cell">
+                                  <span className={`report-state ${report.statusKey}`}>{report.status}</span>
+                                  <small>{t("updated")} {report.updated}</small>
+                                </div>
+                                <div role="cell">
+                                  <strong>{report.decisionCue}</strong>
+                                  <small>{report.fileName}</small>
+                                </div>
+                                <div className="reports-table-actions" role="cell">
+                                  <button
+                                    type="button"
+                                    className="panel-link"
+                                    onClick={() => setSelectedReportId(activeReport?.id === report.id ? null : report.id)}
+                                  >
+                                    {activeReport?.id === report.id ? t("hidePreview") : t("previewReport")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="panel-link"
+                                    onClick={() => announce(t("downloadQueued", { name: report.fileName }))}
+                                  >
+                                    {t("downloadReport")}
+                                  </button>
+                                </div>
+                                {activeReport?.id === report.id ? (
+                                  <div className="report-table-preview" role="cell">
+                                    <div>
+                                      <span>{t("reportPreviewTitle")}</span>
+                                      <p>{report.summary}</p>
+                                    </div>
+                                    <ul>
+                                      {report.includes.map((item) => (
+                                        <li key={`${report.id}-${item}`}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </article>
+                            ))}
+                          </div>
+                        )}
                       </section>
-                    </article>
+                    )}
                   </div>
                 </div>
               ) : null}
 
-              {siteTab === "dev" ? (
-                <div className="site-tab-panel">
-                  <h2>{t("devDiagnostics")}</h2>
-                  <p>{t("devBody")}</p>
-                  <div className="activity-feed">
-                    {siteActivity.map((item) => (
-                      <div key={`${item.site}-${item.time}`}>
-                        <span>{item.time}</span>
-                        <strong>{item.site}</strong>
-                        <p>{item.event}</p>
+              {siteTab === "alerts" ? (
+                <div
+                  id={`${selectedSite.id}-alerts-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-alerts-tab`}
+                >
+                  <section className="alerts-summary-panel">
+                    <div>
+                      <span className="section-kicker">{t("alerts")}</span>
+                      <h2>{t("alertsTabTitle")}</h2>
+                      <p>{t("alertsTabBody")}</p>
+                    </div>
+                    <div className="alerts-metric-strip" aria-label={t("alertMetricsLabel")}>
+                      {alertSummaryMetrics.map((metric) => (
+                        <article key={metric.id} className={`alert-metric ${metric.tone}`}>
+                          <span>{metric.label}</span>
+                          <strong>{metric.value}</strong>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="workspace-card workspace-card-muted alerts-queue-card">
+                    <header className="detail-section-header">
+                      <div>
+                        <span className="section-kicker">{t("alertQueueLabel")}</span>
+                        <h3>{t("alertQueueTitle")}</h3>
                       </div>
-                    ))}
-                  </div>
+                      <p>{t("alertQueueBody")}</p>
+                    </header>
+                    {siteAlerts.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>{t("noAlertsTitle")}</strong>
+                        <span>{t("noAlertsBody")}</span>
+                      </div>
+                    ) : (
+                      <div className="alert-list">
+                        {siteAlerts.map((alert) => (
+                          <article key={alert.id} className="alert-row">
+                            <div className="alert-row-head">
+                              <span className={`status-label ${alert.severity}`}>{alert.status}</span>
+                            </div>
+                            <div className="alert-row-copy">
+                              <strong>{alert.title}</strong>
+                              <span>{alert.id} · {alert.module}</span>
+                            </div>
+                            <div className="alert-row-detail">
+                              <span>{t("assignedOwner")}</span>
+                              <strong>{alert.owner}</strong>
+                            </div>
+                            <div className="alert-row-detail">
+                              <span>{t("openedAgoLabel")}</span>
+                              <strong>{alert.openedAgo}</strong>
+                            </div>
+                            <div className="alert-row-detail alert-row-due">
+                              <span>{t("dueWindowLabel")}</span>
+                              <strong>{alert.dueWindow}</strong>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+
+              {siteTab === "site" ? (
+                <div
+                  id={`${selectedSite.id}-site-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-site-tab`}
+                >
+                  {siteProfile ? (
+                    <div className="site-profile-grid">
+                      <section className="workspace-card workspace-card-muted">
+                        <header className="detail-section-header">
+                          <div>
+                            <span className="section-kicker">{t("siteTab")}</span>
+                            <h3>{t("siteInformationTitle")}</h3>
+                          </div>
+                        </header>
+                        <div className="maintenance-grid">
+                          <div>
+                            <span>{t("siteCode")}</span>
+                            <strong>{siteProfile.code}</strong>
+                          </div>
+                          <div>
+                            <span>{t("locationLabel")}</span>
+                            <strong>{siteProfile.location}</strong>
+                          </div>
+                          <div>
+                            <span>{t("onlineDevices")}</span>
+                            <strong>{siteProfile.onlineDevices}</strong>
+                          </div>
+                          <div>
+                            <span>{t("siteType")}</span>
+                            <strong>{siteProfile.siteType}</strong>
+                          </div>
+                          <div>
+                            <span>{t("emsWorkflows")}</span>
+                            <strong>{siteProfile.workflowCount}</strong>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="workspace-card workspace-card-muted">
+                        <header className="detail-section-header">
+                          <div>
+                            <span className="section-kicker">{t("assignedOwner")}</span>
+                            <h3>{siteProfile.owner}</h3>
+                          </div>
+                        </header>
+                        <div className="site-owner-profile">
+                          <div>
+                            <span>{t("ownerTeam")}</span>
+                            <strong>{siteProfile.ownerTeam}</strong>
+                          </div>
+                          <div>
+                            <span>{t("locationLabel")}</span>
+                            <strong>{siteProfile.location}</strong>
+                          </div>
+                          <div>
+                            <span>{t("lastUpdate")}</span>
+                            <strong>{siteWorkspace.overview.meta.updatedAt}</strong>
+                          </div>
+                        </div>
+                        <p>{siteProfile.note}</p>
+                      </section>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </article>

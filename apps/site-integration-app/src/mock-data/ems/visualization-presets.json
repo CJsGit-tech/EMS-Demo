@@ -1,0 +1,98 @@
+[
+  {
+    "id": "overview-load-signal",
+    "tab": "overview",
+    "type": "line-actual-vs-forecast",
+    "title": "Demand signal",
+    "titleZhTw": "需量訊號",
+    "purpose": "Show whether the current site decision is aligned with the latest demand forecast.",
+    "dataKey": "energyProfile.loadTrend24h",
+    "xField": "hour",
+    "yFields": ["actualKw", "forecastKw"]
+  },
+  {
+    "id": "overview-reserve-signal",
+    "tab": "overview",
+    "type": "line-with-band",
+    "title": "Reserve signal",
+    "titleZhTw": "備轉訊號",
+    "purpose": "Show whether storage remains above the site reserve floor.",
+    "dataKey": "assets.storageTrend24h",
+    "xField": "hour",
+    "yFields": ["socPct", "reserveFloorPct"]
+  },
+  {
+    "id": "overview-posture-strip",
+    "tab": "overview",
+    "type": "status-strip",
+    "title": "Module posture strip",
+    "titleZhTw": "模組姿態列",
+    "purpose": "Show all active EMS workflows at a glance without opening every module."
+  },
+  {
+    "id": "overview-alarm-list",
+    "tab": "overview",
+    "type": "priority-list",
+    "title": "Unresolved alarms",
+    "titleZhTw": "未結警報",
+    "purpose": "Compact operator backlog ordered by severity and due window."
+  },
+  {
+    "id": "devices-load-trend-24h",
+    "tab": "devices",
+    "type": "line-actual-vs-forecast",
+    "title": "24h load trend",
+    "titleZhTw": "24 小時用電趨勢",
+    "dataKey": "energyProfile.loadTrend24h",
+    "xField": "hour",
+    "yFields": ["actualKw", "forecastKw"]
+  },
+  {
+    "id": "devices-generation-trend-24h",
+    "tab": "devices",
+    "type": "line-actual-vs-forecast",
+    "title": "24h generation trend",
+    "titleZhTw": "24 小時發電趨勢",
+    "dataKey": "energyProfile.generationTrend24h",
+    "xField": "hour",
+    "yFields": ["actualKw", "forecastKw"]
+  },
+  {
+    "id": "devices-hvac-sensor-trend",
+    "tab": "devices",
+    "type": "line-with-band",
+    "title": "HVAC sensor drift",
+    "titleZhTw": "HVAC 感測偏移",
+    "dataKey": "assets.hvac.sensorTrend24h",
+    "xField": "hour",
+    "yFields": ["zoneTempC", "setpointC"]
+  },
+  {
+    "id": "ems-soc-reserve-band",
+    "tab": "ems",
+    "type": "line-with-band",
+    "title": "Storage SOC and reserve band",
+    "titleZhTw": "儲能 SOC 與備轉帶",
+    "dataKey": "assets.storageTrend24h",
+    "xField": "hour",
+    "yFields": ["socPct", "reserveFloorPct"]
+  },
+  {
+    "id": "ems-export-plan",
+    "tab": "ems",
+    "type": "bar-planned-vs-available",
+    "title": "Export plan vs available",
+    "titleZhTw": "外售計畫與可用量",
+    "dataKey": "assets.exportPlan",
+    "xField": "window",
+    "yFields": ["plannedKw", "availableKw"]
+  },
+  {
+    "id": "reports-list",
+    "tab": "reports",
+    "type": "document-list",
+    "title": "Daily / Weekly / Settlement reports",
+    "titleZhTw": "Daily / Weekly / Settlement 報告",
+    "purpose": "Drive the detail page into report-specific context instead of generic dashboard repetition."
+  }
+]

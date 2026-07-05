@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "site-detail.schema.json",
+  "title": "EMS Site Detail Workspace",
+  "type": "object",
+  "required": [
+    "site",
+    "summary",
+    "energyProfile",
+    "assets",
+    "modules",
+    "alerts",
+    "reports",
+    "visualizations"
+  ],
+  "properties": {
+    "site": {
+      "type": "object",
+      "required": [
+        "id",
+        "code",
+        "name",
+        "nameZhTw",
+        "city",
+        "country",
+        "region",
+        "timezone",
+        "status",
+        "owner"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "nameZhTw": { "type": "string" },
+        "city": { "type": "string" },
+        "country": { "type": "string" },
+        "region": { "type": "string" },
+        "timezone": { "type": "string" },
+        "siteType": { "type": "string" },
+        "status": { "enum": ["healthy", "watch", "critical"] },
+        "owner": {
+          "type": "object",
+          "required": ["name", "team"],
+          "properties": {
+            "name": { "type": "string" },
+            "team": { "type": "string" }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "headline",
+        "headlineZhTw",
+        "currentPosture",
+        "nextAction",
+        "openAlarmCount",
+        "lastUpdated"
+      ],
+      "properties": {
+        "headline": { "type": "string" },
+        "headlineZhTw": { "type": "string" },
+        "currentPosture": { "type": "string" },
+        "nextAction": { "type": "string" },
+        "openAlarmCount": { "type": "integer", "minimum": 0 },
+        "lastUpdated": { "type": "string" }
+      }
+    },
+    "energyProfile": {
+      "type": "object",
+      "required": [
+        "siteEuiKbtuFt2Yr",
+        "sourceEuiKbtuFt2Yr",
+        "annualEmissionsTco2e",
+        "avoidedEmissionsTco2e",
+        "actualDemandKw",
+        "forecastDemandKw",
+        "peakDemandKw",
+        "loadFactorPct",
+        "actualGenerationKw",
+        "forecastGenerationKw",
+        "forecastConfidencePct"
+      ],
+      "properties": {
+        "siteEuiKbtuFt2Yr": { "type": "number" },
+        "sourceEuiKbtuFt2Yr": { "type": "number" },
+        "annualEmissionsTco2e": { "type": "number" },
+        "avoidedEmissionsTco2e": { "type": "number" },
+        "actualDemandKw": { "type": "number" },
+        "forecastDemandKw": { "type": "number" },
+        "peakDemandKw": { "type": "number" },
+        "peakWindow": { "type": "string" },
+        "loadFactorPct": { "type": "number" },
+        "actualGenerationKw": { "type": "number" },
+        "forecastGenerationKw": { "type": "number" },
+        "forecastConfidencePct": { "type": "number" },
+        "forecastErrorPct": { "type": "number" },
+        "forecastBiasPct": { "type": "number" },
+        "loadTrend24h": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actualForecastPoint" }
+        },
+        "generationTrend24h": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actualForecastPoint" }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "required": [
+        "hvac",
+        "storage",
+        "generation",
+        "chargers",
+        "mobileChargers",
+        "inventory"
+      ],
+      "properties": {
+        "hvac": {
+          "type": "object",
+          "required": ["status", "onlineUnits", "totalUnits"],
+          "properties": {
+            "status": { "type": "string" },
+            "onlineUnits": { "type": "integer" },
+            "totalUnits": { "type": "integer" },
+            "setpointDriftC": { "type": "number" },
+            "runtimeHours24h": { "type": "number" },
+            "sensorTrend24h": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/hvacSensorPoint" }
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "required": [
+            "stateOfChargePct",
+            "stateOfHealthPct",
+            "availablePowerKw",
+            "availableEnergyKwh",
+            "reserveMarginPct",
+            "roundTripEfficiencyPct"
+          ],
+          "properties": {
+            "stateOfChargePct": { "type": "number" },
+            "stateOfHealthPct": { "type": "number" },
+            "availablePowerKw": { "type": "number" },
+            "availableEnergyKwh": { "type": "number" },
+            "reserveMarginPct": { "type": "number" },
+            "roundTripEfficiencyPct": { "type": "number" },
+            "cycles30d": { "type": "number" }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "required": ["actualKw", "forecastKw", "capacityFactorPct"],
+          "properties": {
+            "actualKw": { "type": "number" },
+            "forecastKw": { "type": "number" },
+            "capacityFactorPct": { "type": "number" },
+            "curtailmentRiskLevel": { "type": "string" }
+          }
+        },
+        "chargers": {
+          "type": "object",
+          "required": [
+            "activeChargers",
+            "connectedFleetCount",
+            "v2gAvailableKw",
+            "utilizationPct"
+          ],
+          "properties": {
+            "activeChargers": { "type": "integer" },
+            "connectedFleetCount": { "type": "integer" },
+            "v2gAvailableKw": { "type": "number" },
+            "utilizationPct": { "type": "number" },
+            "businessModeRecommendation": { "type": "string" }
+          }
+        },
+        "mobileChargers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["unitId", "status", "destination", "etaMinutes"],
+            "properties": {
+              "unitId": { "type": "string" },
+              "status": { "type": "string" },
+              "destination": { "type": "string" },
+              "etaMinutes": { "type": "integer" },
+              "priority": { "type": "string" }
+            }
+          }
+        },
+        "inventory": {
+          "type": "object",
+          "required": [
+            "tradableInventoryMwh",
+            "reservedInventoryMwh",
+            "releaseThresholdMwh",
+            "settlementStatus"
+          ],
+          "properties": {
+            "tradableInventoryMwh": { "type": "number" },
+            "reservedInventoryMwh": { "type": "number" },
+            "releaseThresholdMwh": { "type": "number" },
+            "settlementStatus": { "type": "string" },
+            "holdReason": { "type": "string" }
+          }
+        }
+        ,
+        "storageTrend24h": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/storageTrendPoint" }
+        },
+        "exportPlan": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exportPlanPoint" }
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "moduleKey",
+          "name",
+          "nameZhTw",
+          "currentPosture",
+          "forecast",
+          "risk",
+          "recommendedAction",
+          "owner",
+          "cadence",
+          "metrics"
+        ],
+        "properties": {
+          "moduleKey": { "type": "string" },
+          "name": { "type": "string" },
+          "nameZhTw": { "type": "string" },
+          "currentPosture": { "type": "string" },
+          "forecast": { "type": "string" },
+          "risk": { "type": "string" },
+          "recommendedAction": { "type": "string" },
+          "owner": { "type": "string" },
+          "cadence": { "type": "string" },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["number", "string", "boolean"]
+            }
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "title",
+          "titleZhTw",
+          "owner",
+          "moduleKey",
+          "openedAgo",
+          "status"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "enum": ["healthy", "watch", "critical"] },
+          "title": { "type": "string" },
+          "titleZhTw": { "type": "string" },
+          "owner": { "type": "string" },
+          "moduleKey": { "type": "string" },
+          "openedAgo": { "type": "string" },
+          "dueWindow": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "title",
+          "titleZhTw",
+          "status",
+          "updated",
+          "purpose",
+          "includes"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["daily", "weekly", "monthly", "settlement", "review"] },
+          "title": { "type": "string" },
+          "titleZhTw": { "type": "string" },
+          "status": { "type": "string" },
+          "updated": { "type": "string" },
+          "purpose": { "type": "string" },
+          "includes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "decisionCue": { "type": "string" }
+        }
+      }
+    },
+    "visualizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "title", "dataKey"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "dataKey": { "type": "string" },
+          "tab": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "actualForecastPoint": {
+      "type": "object",
+      "required": ["hour", "actualKw", "forecastKw"],
+      "properties": {
+        "hour": { "type": "string" },
+        "actualKw": { "type": "number" },
+        "forecastKw": { "type": "number" }
+      }
+    },
+    "hvacSensorPoint": {
+      "type": "object",
+      "required": ["hour", "zoneTempC", "setpointC", "runtimePct"],
+      "properties": {
+        "hour": { "type": "string" },
+        "zoneTempC": { "type": "number" },
+        "setpointC": { "type": "number" },
+        "runtimePct": { "type": "number" }
+      }
+    },
+    "storageTrendPoint": {
+      "type": "object",
+      "required": ["hour", "socPct", "reserveFloorPct"],
+      "properties": {
+        "hour": { "type": "string" },
+        "socPct": { "type": "number" },
+        "reserveFloorPct": { "type": "number" }
+      }
+    },
+    "exportPlanPoint": {
+      "type": "object",
+      "required": ["window", "plannedKw", "availableKw"],
+      "properties": {
+        "window": { "type": "string" },
+        "plannedKw": { "type": "number" },
+        "availableKw": { "type": "number" }
+      }
+    }
+  }
+}
