@@ -85,14 +85,17 @@ Purpose:
 
 Current implementation:
 - Product scope is defined in `docs/context/apps/internal-operations-app/PRODUCT.md`
-- Vite + React scaffold is in place
-- Single-screen LLM document generation workspace is implemented
-- Featured generator cards open an in-place drafting surface with mock async generation states
+- Vite + React application shell is in place with route-based navigation
+- Overview, new-document, generator, document-library, run-history, and context-management pages are implemented
+- Tender, financial report, PPTX, and operations memo generators provide structured inputs, mock async generation states, draft previews, and local draft persistence
+- English and Traditional Chinese localization plus light and dark themes are implemented
+- The current frontend is a browser-only prototype backed by mock data; no production API or LLM service is connected yet
 
 Planned next work:
 - Add richer document templates and field schemas per generator
 - Connect generation actions to real backend or LLM services
-- Expand export, review, and version-comparison flows
+- Expand export, review, collaboration, and version-comparison flows
+- Add production persistence, authentication, permissions, and ERP-facing integrations
 
 ### 3. Energy Operations App
 
@@ -117,7 +120,7 @@ Planned next work:
 | App | Purpose | Current Status | Notes |
 |---|---|---|---|
 | `site-integration-app` | Site monitoring and site entry | In progress / demo implemented | Working frontend with map and site workspace |
-| `internal-operations-app` | Internal ops and ERP-adjacent workflows | In progress / draft implemented | Single-screen document generation app scaffold is now in place |
+| `internal-operations-app` | Internal ops and ERP-adjacent workflows | In progress / prototype implemented | Routed document-generation workspace with library, runs, context, localization, and themes |
 | `energy-operations-app` | EMS forecasting and energy operations | Planned | Scope documented, app not built yet |
 
 ## Done vs Not Done
@@ -128,7 +131,7 @@ Planned next work:
 - `site-integration-app` has a working Vite React implementation
 - `internal-operations-app` has a working Vite React implementation
 - Site map interaction, country drill-down, site workspace, i18n, and theming are present
-- Internal operations document-generation draft surface is present
+- Internal operations document-generation workspace, library, run history, and context-management surfaces are present
 - Product definition docs exist for the internal operations and energy operations apps
 
 ### Not Done Yet
@@ -154,12 +157,22 @@ Root-level `PRODUCT.md`, `DESIGN.md`, and `REQUEST.md` are compatibility pointer
 
 ## Local Development
 
-At the moment, `site-integration-app` and `internal-operations-app` are runnable as frontend apps.
+At the moment, `site-integration-app` and `internal-operations-app` are runnable as frontend apps. Each app manages its dependencies independently.
 
-Typical workflow:
+Run the site integration app:
 
 ```bash
 cd apps/site-integration-app
 npm install
 npm run dev
 ```
+
+Run the internal operations app:
+
+```bash
+cd apps/internal-operations-app
+npm install
+npm run dev
+```
+
+To create a production build of either app, run `npm run build` from that app's directory.
