@@ -2,10 +2,24 @@
 
 ## 內部管理
 
+### 目前聚焦
+
+#### 1. Server 管理及內部資料優化
+- English: Server Management & Internal Data Optimization
+- Purpose: Keep internal servers healthy and make operational data cleaner, faster, and easier to maintain.
+- Operational focus: server health, access review, capacity usage, record cleanup, data normalization, sync status, backup hygiene.
+- Example demo fields: server health, service uptime, storage usage, sync backlog, cleanup queue, backup status.
+
+#### 2. 報表、單據、文件產生自動化
+- English: Report, Form & Document Automation
+- Purpose: Generate routine operational outputs with less manual work and fewer formatting or handoff errors.
+- Operational focus: report generation, form filling, template-based documents, approval packets, batch export, version control.
+- Example demo fields: report type, document template, generated count, approval status, export format, pending revisions.
+
+### 暫緩 / Postponed for now
+
 - 工務管理系統
 - 工務管理與 ERP 對接
-- Server 管理及內部資料優化
-- 報表、單據、文件產生自動化
 
 ## 產品對接
 

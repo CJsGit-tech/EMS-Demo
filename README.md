@@ -85,12 +85,14 @@ Purpose:
 
 Current implementation:
 - Product scope is defined in `docs/context/apps/internal-operations-app/PRODUCT.md`
-- No frontend application scaffold has been created yet
+- Vite + React scaffold is in place
+- Single-screen LLM document generation workspace is implemented
+- Featured generator cards open an in-place drafting surface with mock async generation states
 
 Planned next work:
-- Define screen architecture
-- Create the frontend app scaffold
-- Build task intake, data preparation, and document automation flows
+- Add richer document templates and field schemas per generator
+- Connect generation actions to real backend or LLM services
+- Expand export, review, and version-comparison flows
 
 ### 3. Energy Operations App
 
@@ -114,8 +116,8 @@ Planned next work:
 
 | App | Purpose | Current Status | Notes |
 |---|---|---|---|
-| `site-integration-app` | Site monitoring and site entry | In progress / demo implemented | The only app with a working frontend today |
-| `internal-operations-app` | Internal ops and ERP-adjacent workflows | Planned | Scope documented, app not built yet |
+| `site-integration-app` | Site monitoring and site entry | In progress / demo implemented | Working frontend with map and site workspace |
+| `internal-operations-app` | Internal ops and ERP-adjacent workflows | In progress / draft implemented | Single-screen document generation app scaffold is now in place |
 | `energy-operations-app` | EMS forecasting and energy operations | Planned | Scope documented, app not built yet |
 
 ## Done vs Not Done
@@ -124,12 +126,13 @@ Planned next work:
 
 - Repo-level product and design direction are documented
 - `site-integration-app` has a working Vite React implementation
+- `internal-operations-app` has a working Vite React implementation
 - Site map interaction, country drill-down, site workspace, i18n, and theming are present
+- Internal operations document-generation draft surface is present
 - Product definition docs exist for the internal operations and energy operations apps
 
 ### Not Done Yet
 
-- `internal-operations-app` frontend implementation
 - `energy-operations-app` frontend implementation
 - Shared cross-app design system extraction
 - Production backend/data connections
@@ -151,7 +154,7 @@ Root-level `PRODUCT.md`, `DESIGN.md`, and `REQUEST.md` are compatibility pointer
 
 ## Local Development
 
-At the moment, only `site-integration-app` is runnable as a frontend app.
+At the moment, `site-integration-app` and `internal-operations-app` are runnable as frontend apps.
 
 Typical workflow:
 

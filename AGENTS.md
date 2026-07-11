@@ -75,8 +75,13 @@ Rules:
 - Suggest commands from `$impeccable` and/or `taste-skill` routing above.
 - Do not end with generic text like `let me know what you want next`.
 - If the task is ambiguous, state the assumption briefly, then give the command.
+- After the command, add `Why:` with one short, concrete reason this is the best next step now.
+- The `Why:` should reference real context such as recent edits, missing diagnosis, unresolved UI issues, lack of responsive verification, or readiness for polish.
 
 Examples:
 - `Suggested next step: $impeccable critique apps/site-integration-app`
+  `Why: the surface already exists and needs a clear diagnosis before more changes are made.`
 - `Suggested next step: $impeccable layout apps/site-integration-app/src/App.jsx`
+  `Why: the next likely improvement is spacing and hierarchy refinement in the file that was just touched.`
 - `Suggested next step: $impeccable shape apps/site-integration-app`
+  `Why: this is the right move when the feature direction is not locked and structure should come before implementation.`
