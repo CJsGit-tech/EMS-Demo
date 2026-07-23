@@ -83,6 +83,29 @@ handoff_rules
 
 Role prompts guide behavior but do not grant permissions, change site scope, approve tools, or activate memories.
 
+### 3.1.1 Agency-agent assignments
+
+The initial runtime role prompts are based on the most suitable agency-agent instructions already copied under `AppDeploy/agent-team/skills/`. The agency-agent is the prompt-design owner and competency source; the runtime role remains an EMS-specific application role with its own schema, validator, site-scope rules, and tool policy.
+
+| Runtime role | Primary agency-agent source | Supporting agency-agent sources | Adaptation boundary |
+|---|---|---|---|
+| Site Security Manager | `Security Engineer` — `AppDeploy/agent-team/skills/security/engineering-security-engineer.md` | `Backend Architect` for authorization and service boundaries; `MCP Builder` for tool exposure controls | Apply security analysis to EMS site access, audit events, scope violations, and safe checks. Never grant permissions or approve its own tools. |
+| Device Monitoring Expert | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `MCP Builder` for device/alert tool contracts; `AI Engineer` for uncertainty and structured output | Apply data-quality, freshness, anomaly, and lineage discipline to device, HVAC, alert, and sensor workflows. |
+| Data Analysis Specialist | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `AI Engineer` for model/provider integration; `Backend Architect` for query and aggregation boundaries | Apply trusted-data, aggregation, quality-rule, and evidence practices to EMS time series and comparisons. |
+| Report Generation Specialist | `Technical Writer` — `AppDeploy/agent-team/skills/documentation/engineering-technical-writer.md` | `AI Engineer` for typed generation; `UX Architect` for information hierarchy and accessible presentation | Apply reader-focused structure, clarity, source attribution, and documentation quality to sanitized EMS report drafts. |
+
+The following agency-agents support the role/skill system without becoming runtime specialist hats:
+
+- `AI Engineer` owns provider integration, prompt assembly, structured output, repair limits, and persona/memory extraction behavior.
+- `MCP Builder` owns typed FastMCP tools, tool descriptions, workflow hints, and protocol tests.
+- `Backend Architect` owns PostgreSQL persistence, API boundaries, transactions, and authorization enforcement.
+- `Software Architect` owns the Role–Skill–Persona–Memory boundaries and evolution decisions.
+- `UX Architect` owns chat history, memory review, persona confirmation, and tool approval interaction design.
+- `Product Manager` owns preference categories, user expectations, and confirmation semantics.
+- `API Tester`, `Evidence Collector`, and `Reality Checker` own contract, visual, and integration verification.
+
+Agency-agent rules are never copied into a runtime prompt without domain adaptation. In particular, general agency memory, broad project permissions, implementation instructions, and unrelated examples must be excluded from the runtime specialist prompt.
+
 ### 3.2 Skills: optional workflows
 
 Skills are workflow playbooks that give a role hints about what to inspect, which typed MCP tools may be useful, what evidence is required, and how to complete or degrade safely.
