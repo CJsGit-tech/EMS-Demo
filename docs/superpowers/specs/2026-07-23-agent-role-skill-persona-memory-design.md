@@ -2,11 +2,11 @@
 
 **Status:** Design approved in conversation; implementation not started  
 **Date:** 2026-07-23  
-**Scope:** Reconstruct the LLM behavior around the existing FastAPI, FastMCP, OpenAI provider, and four runtime specialist packages.
+**Scope:** Reconstruct the LLM behavior for construction-site energy and operations management around the existing FastAPI, FastMCP, OpenAI provider, and four runtime specialist packages.
 
 ## 1. Problem and goals
 
-The EMS AgentCrew needs to behave like an intelligent assistant while preserving explicit operational boundaries. It must:
+The construction-site EMS AgentCrew needs to behave like an intelligent assistant while preserving explicit operational boundaries. It must:
 
 - use stable specialist roles as system-prompt hats;
 - use skills as optional workflows that guide MCP/tool usage;
@@ -18,7 +18,7 @@ The EMS AgentCrew needs to behave like an intelligent assistant while preserving
 - require approval for state-changing tools;
 - keep FastAPI as the authoritative owner of state and FastMCP as a typed tool gateway.
 
-The design is site-specific for the first version. Every conversation, message, memory, preference, run, and tool call is bound to `user_id` and `site_id`.
+The design is construction-site-specific for the first version. A site represents a construction project or jobsite, including temporary power, generators, site trailers, HVAC, equipment, access control, and safety-related operational signals. Every conversation, message, memory, preference, run, and tool call is bound to `user_id` and `site_id`.
 
 ## 2. Existing system context and dependencies
 
@@ -63,10 +63,10 @@ Roles are stable behavioral identities placed on the agent before answer generat
 
 | Role | Responsibility |
 |---|---|
-| Site Security Manager | Access posture, security findings, authorization interpretation, and safe next checks |
-| Device Monitoring Expert | Device health, alerts, HVAC behavior, sensor reliability, and operational checks |
-| Data Analysis Specialist | Trends, comparisons, anomalies, data quality, and evidence-backed conclusions |
-| Report Generation Specialist | Audience, report structure, summaries, recommendations, sources, and sanitized output |
+| Site Security Manager | Jobsite access posture, worker/subcontractor access signals, security findings, authorization interpretation, and safe next checks |
+| Device Monitoring Expert | Generator, temporary-power, trailer-HVAC, equipment, sensor, and alarm health; operational checks |
+| Data Analysis Specialist | Construction-site energy trends, generator/facility comparisons, anomalies, data quality, and evidence-backed conclusions |
+| Report Generation Specialist | Construction operations reports, audience-specific summaries, recommendations, sources, and sanitized output |
 
 Each role package owns:
 
@@ -89,10 +89,10 @@ The initial runtime role prompts are based on the most suitable agency-agent ins
 
 | Runtime role | Primary agency-agent source | Supporting agency-agent sources | Adaptation boundary |
 |---|---|---|---|
-| Site Security Manager | `Security Engineer` — `AppDeploy/agent-team/skills/security/engineering-security-engineer.md` | `Backend Architect` for authorization and service boundaries; `MCP Builder` for tool exposure controls | Apply security analysis to EMS site access, audit events, scope violations, and safe checks. Never grant permissions or approve its own tools. |
-| Device Monitoring Expert | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `MCP Builder` for device/alert tool contracts; `AI Engineer` for uncertainty and structured output | Apply data-quality, freshness, anomaly, and lineage discipline to device, HVAC, alert, and sensor workflows. |
-| Data Analysis Specialist | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `AI Engineer` for model/provider integration; `Backend Architect` for query and aggregation boundaries | Apply trusted-data, aggregation, quality-rule, and evidence practices to EMS time series and comparisons. |
-| Report Generation Specialist | `Technical Writer` — `AppDeploy/agent-team/skills/documentation/engineering-technical-writer.md` | `AI Engineer` for typed generation; `UX Architect` for information hierarchy and accessible presentation | Apply reader-focused structure, clarity, source attribution, and documentation quality to sanitized EMS report drafts. |
+| Site Security Manager | `Security Engineer` — `AppDeploy/agent-team/skills/security/engineering-security-engineer.md` | `Backend Architect` for authorization and service boundaries; `MCP Builder` for tool exposure controls | Adapt security analysis to construction-site access, worker/subcontractor records, temporary facilities, audit events, and safe checks. Never grant permissions or approve its own tools. |
+| Device Monitoring Expert | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `MCP Builder` for device/alert tool contracts; `AI Engineer` for uncertainty and structured output | Adapt data-quality, freshness, anomaly, and lineage discipline to generators, temporary power, trailers, HVAC, equipment, alarms, and jobsite sensors. |
+| Data Analysis Specialist | `Data Engineer` — `AppDeploy/agent-team/skills/engineering/engineering-data-engineer.md` | `AI Engineer` for model/provider integration; `Backend Architect` for query and aggregation boundaries | Apply trusted-data, aggregation, quality-rule, and evidence practices to construction energy consumption, generator runtime, temporary loads, and phase/period comparisons. |
+| Report Generation Specialist | `Technical Writer` — `AppDeploy/agent-team/skills/documentation/engineering-technical-writer.md` | `AI Engineer` for typed generation; `UX Architect` for information hierarchy and accessible presentation | Adapt reader-focused structure and source attribution to superintendent, project-manager, facilities, safety, and subcontractor audiences while producing sanitized construction-site report drafts. |
 
 The following agency-agents support the role/skill system without becoming runtime specialist hats:
 
@@ -110,14 +110,14 @@ Agency-agent rules are never copied into a runtime prompt without domain adaptat
 
 Skills are workflow playbooks that give a role hints about what to inspect, which typed MCP tools may be useful, what evidence is required, and how to complete or degrade safely.
 
-Initial skill examples:
+Initial construction-site skill examples:
 
-- `inspect-site-security`
-- `diagnose-device-alert`
-- `analyze-energy-trend`
-- `generate-site-report`
-- `compare-periods`
-- `verify-data-quality`
+- `inspect-jobsite-access`
+- `diagnose-generator-or-hvac-alert`
+- `analyze-temporary-power-trend`
+- `generate-construction-site-report`
+- `compare-construction-phases`
+- `verify-jobsite-data-quality`
 
 Each skill package owns:
 
@@ -210,9 +210,10 @@ Examples:
 | User request | Result |
 |---|---|
 | “What does peak demand mean?” | Data Analysis Specialist, role-only |
-| “Analyze yesterday’s peak demand at this site.” | Data Analysis Specialist + `analyze-energy-trend` + energy tool |
-| “Write a formal energy report.” | Report Generation Specialist + `generate-site-report` |
-| “How should I interpret this alert?” | Device Monitoring Expert, role-only unless live data is needed |
+| “Analyze yesterday’s generator and temporary-power demand at this jobsite.” | Data Analysis Specialist + `analyze-temporary-power-trend` + energy tool |
+| “Write a weekly superintendent energy report.” | Report Generation Specialist + `generate-construction-site-report` |
+| “How should I interpret this trailer HVAC alarm?” | Device Monitoring Expert, role-only unless live data is needed |
+| “Show me who accessed the equipment yard after hours.” | Site Security Manager + `inspect-jobsite-access` + approved access tool |
 
 The existing report chain remains allowlisted and bounded:
 
@@ -378,8 +379,8 @@ End-to-end evidence must prove:
 
 The implementation plan must map work to these boundaries:
 
-- `RolePackage`: stable prompt, schema, validator, and handoff rules;
-- `SkillPackage`: workflow, triggers, tool hints, steps, and failure rules;
+- `RolePackage`: stable construction-site prompt, schema, validator, and handoff rules;
+- `SkillPackage`: construction-site workflow, triggers, tool hints, steps, and failure rules;
 - `MemoryManager`: retrieval, bounded context, candidate creation, and redaction;
 - `PersonaManager`: candidate confirmation, versioning, precedence, correction, and revocation;
 - `ChatSessionService`: conversations and append-only messages;
