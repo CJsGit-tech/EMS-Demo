@@ -24,11 +24,11 @@ async def seed_ems(session_factory=None, seed_version: int = 3) -> SeedManifest:
     payload = {"seed_version": seed_version, "row_counts": counts, "from": FIXED_FROM.isoformat(), "to": FIXED_TO.isoformat()}
     manifest_hash = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     if session_factory is not None:
-        await _persist_seed(session_factory, seed_version, manifest_hash)
+        await _persist_seed(session_factory, seed_version, manifest_hash, counts)
     return SeedManifest(seed_version=seed_version, row_counts=counts, fixed_from=FIXED_FROM, fixed_to=FIXED_TO, manifest_hash=manifest_hash)
 
 
-async def _persist_seed(session_factory, seed_version: int, manifest_hash: str) -> None:
+async def _persist_seed(session_factory, seed_version: int, manifest_hash: str, counts: dict[str, int]) -> None:
     """Insert the fixed demo profile once; the source hash is the idempotency key."""
     source_hash = f"ems-deterministic-seed-v{seed_version}-{manifest_hash}"
     source_file_id = 9000 + seed_version

@@ -974,13 +974,6 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
     from.setUTCDate(from.getUTCDate() - rangeOption.days);
     return { from, to };
   }, [rangeOption.days]);
-  const isLive = liveState.source === "postgresql" && (liveState.status === "fresh" || liveState.status === "empty");
-  const sourceLabel = isLive ? t("emsPostgresSource") : t("emsFixtureSource");
-  const statusLabel = liveState.status === "loading"
-    ? t("emsLoading")
-    : liveState.status === "unauthorized" || liveState.status === "unavailable" || liveState.status === "degraded"
-      ? t("emsUnavailable")
-      : sourceLabel;
   const signals = viewModel
     ? buildEmsLiveCharts(viewModel, locale, rangeOption.days)
     : liveState.status === "demo"
@@ -1021,35 +1014,6 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
           ))}
         </div>
       </section>
-      <section className="workspace-card workspace-card-live-data" data-testid="ems-live-data-card" aria-label={t("emsDataTitle")}>
-        <header className="detail-section-header">
-          <div>
-            <span className="section-kicker">{t("emsDataSource")}</span>
-            <h3>{t("emsDataTitle")}</h3>
-          </div>
-          <p>{statusLabel}</p>
-        </header>
-        <p>{t("emsDataBody")}</p>
-        <div className="module-command-metrics">
-          <div>
-            <span>{t("emsDataSource")}</span>
-            <strong>{sourceLabel}</strong>
-          </div>
-          <div>
-            <span>{t("emsDataFreshness")}</span>
-            <strong>{viewModel?.health.freshness ?? liveState.snapshot?.freshness?.state ?? liveState.status}</strong>
-          </div>
-          <div>
-            <span>{t("emsDataQuality")}</span>
-            <strong>{viewModel?.health.quality ?? liveState.snapshot?.quality?.state ?? "—"}</strong>
-          </div>
-          <div>
-            <span>{t("emsDataAssets")}</span>
-            <strong>{viewModel?.assets.length ?? "—"}</strong>
-          </div>
-        </div>
-      </section>
-
       {dataFamilies.length > 0 ? (
         <section className="ems-data-families" aria-label={t("emsDataFamiliesTitle")}>
           <header className="ems-kpi-heading"><span className="section-kicker">{t("emsDataFamiliesTitle")}</span></header>
@@ -1091,24 +1055,11 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
   );
 }
 
-function RealtimeSiteDashboard({ selectedSite, liveState, viewModel, fallbackSignals, siteAlerts, t, locale, rangeKey, onRangeChange }) {
+function RealtimeSiteDashboard({ liveState, viewModel, fallbackSignals, siteAlerts, t, locale, rangeKey, onRangeChange }) {
   const visibleAlerts = siteAlerts.slice(0, 3);
 
   return (
     <div className="realtime-dashboard">
-      <section className="workspace-hero workspace-hero-realtime">
-        <div>
-          <span className="section-kicker">{t("realtimeTab")}</span>
-          <h2>{t("realtimeTitle")}</h2>
-          <p>{t("realtimeBody")}</p>
-        </div>
-        <div className="realtime-site-status">
-          <span className={`status-dot ${selectedSite.status}`} />
-          <strong>{selectedSite.name}</strong>
-          <span>{selectedSite.city}</span>
-        </div>
-      </section>
-
       <EmsDashboard
         liveState={liveState}
         viewModel={viewModel}
