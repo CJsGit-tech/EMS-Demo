@@ -173,9 +173,11 @@ Requirements: Docker Desktop with Compose v2.
 ```bash
 git clone <repository-url>
 cd EMS-Demo
-cp .env.example .env.local
 docker compose up --build
 ```
+
+The Compose file includes safe deterministic defaults. Review `.env.example`
+when changing the local provider or database settings; do not commit secrets.
 
 Open [http://localhost:5180](http://localhost:5180) for the site workspace or
 [http://localhost:8004/docs](http://localhost:8004/docs) for the API contract.
