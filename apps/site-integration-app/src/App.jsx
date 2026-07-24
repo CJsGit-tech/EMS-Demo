@@ -1014,9 +1014,33 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
           ))}
         </div>
       </section>
+      {liveState.status === "loading" && !viewModel ? (
+        <section className="ems-loading-state" aria-busy="true" aria-live="polite">
+          <div className="ems-loading-heading">
+            <span className="section-kicker">{t("emsDashboardTitle")}</span>
+            <span className="ems-loading-status"><span className="ems-loading-spinner" aria-hidden="true" />{t("emsLoadingDashboard")}</span>
+          </div>
+          <div className="ems-loading-grid">
+            {[
+              ["ems-loading-family", 1], ["ems-loading-family", 1], ["ems-loading-family", 1], ["ems-loading-family", 1],
+              ["ems-loading-kpi", 2], ["ems-loading-kpi", 2], ["ems-loading-chart", 3], ["ems-loading-chart", 3],
+            ].map(([kind, lines], index) => (
+              <div className={`ems-skeleton-card ${kind}`} key={`${kind}-${index}`}>
+                <span className="ems-skeleton-line ems-skeleton-line-short" />
+                {Array.from({ length: lines }).map((_, lineIndex) => <span className="ems-skeleton-line" key={lineIndex} />)}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {liveState.status === "loading" && viewModel ? (
+        <div className="ems-refresh-indicator" aria-busy="true" aria-live="polite">
+          <span className="ems-loading-spinner" aria-hidden="true" />{t("emsRefreshingDashboard")}
+        </div>
+      ) : null}
       {dataFamilies.length > 0 ? (
         <section className="ems-data-families" aria-label={t("emsDataFamiliesTitle")}>
-          <header className="ems-kpi-heading"><span className="section-kicker">{t("emsDataFamiliesTitle")}</span></header>
+          <header className="ems-kpi-heading"><span className="section-kicker">{t("emsDashboardTitle")}</span><span className="ems-dashboard-status">{t("emsDataFamiliesTitle")}</span></header>
           <div className="ems-family-grid">
             {dataFamilies.map((family) => (
               <article key={family.id} className={`ems-family-card ems-family-${family.id}`}>

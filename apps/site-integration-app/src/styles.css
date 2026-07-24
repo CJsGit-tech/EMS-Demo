@@ -2068,6 +2068,23 @@ tbody tr:focus-visible {
 
 .ems-kpi-section { display: grid; gap: 10px; }
 .ems-data-families { display: grid; gap: 10px; }
+.ems-dashboard-status { color: var(--muted); font-size: 11px; }
+.ems-loading-state { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.ems-loading-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ems-loading-status, .ems-refresh-indicator { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+.ems-refresh-indicator { justify-self: end; min-height: 24px; }
+.ems-loading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ems-skeleton-card { display: grid; align-content: center; gap: 10px; min-height: 76px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.ems-loading-kpi { min-height: 92px; }
+.ems-loading-chart { grid-column: span 2; min-height: 136px; }
+.ems-skeleton-line { display: block; width: 76%; height: 10px; border-radius: 999px; background: linear-gradient(100deg, color-mix(in oklab, var(--line) 45%, transparent) 30%, color-mix(in oklab, var(--primary) 18%, var(--surface)) 48%, color-mix(in oklab, var(--line) 45%, transparent) 65%); background-size: 240% 100%; animation: ems-shimmer 1.35s ease-in-out infinite; }
+.ems-skeleton-line-short { width: 42%; }
+.ems-loading-spinner { width: 12px; height: 12px; border: 2px solid color-mix(in oklab, var(--primary) 20%, transparent); border-top-color: var(--primary); border-radius: 50%; animation: ems-spin .8s linear infinite; }
+@keyframes ems-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes ems-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ems-skeleton-line, .ems-loading-spinner { animation: none; }
+}
 .ems-family-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .ems-family-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
 .ems-family-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 700; }
@@ -3243,6 +3260,9 @@ tbody tr:focus-visible {
 @media (max-width: 720px) {
   .ems-range-toolbar { align-items: stretch; flex-direction: column; }
   .ems-range-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ems-loading-heading { align-items: flex-start; flex-direction: column; }
+  .ems-loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ems-loading-chart { grid-column: span 2; }
   .ems-range-options button { padding: 0 5px; }
   .ems-family-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .site-overview-metrics,
