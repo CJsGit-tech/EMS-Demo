@@ -134,7 +134,13 @@ def _fake_observations(site: str) -> list[dict[str, Any]]:
         timestamp = datetime(2025, 7, 23, 9, tzinfo=timezone.utc) + timedelta(days=day_offset)
         seasonal = 1 + 0.18 * math.sin((2 * math.pi * day_offset) / 365)
         site_offset = 40 if site == "site-002" else 0
-        records.append({"site_id": site, "asset_id": "inv-001" if site == "site-001" else "inv-101", "timestamp": timestamp.isoformat(), "metric": "energy_kwh", "value": round((812 + site_offset) * seasonal, 2), "unit": "kWh", "quality": {"state": "valid", "score": 1.0, "flags": []}})
+        energy = round((812 + site_offset) * seasonal, 2)
+        asset_id = "inv-001" if site == "site-001" else "inv-101"
+        records.append({"site_id": site, "asset_id": asset_id, "timestamp": timestamp.isoformat(), "metric": "energy_kwh", "value": energy, "unit": "kWh", "quality": {"state": "valid", "score": 1.0, "flags": []}})
+        records.extend([
+            {"site_id": site, "asset_id": asset_id, "timestamp": timestamp.isoformat(), "metric": "ac_power_kw", "value": round(energy / 4.2, 2), "unit": "kW", "quality": {"state": "valid", "score": 1.0, "flags": []}},
+            {"site_id": site, "asset_id": asset_id, "timestamp": timestamp.isoformat(), "metric": "dc_power_kw", "value": round(energy / 4.2 * 1.06, 2), "unit": "kW", "quality": {"state": "valid", "score": 1.0, "flags": []}},
+        ])
         records.extend([
             {"site_id": site, "asset_id": "weather-001" if site == "site-001" else "weather-101", "timestamp": timestamp.isoformat(), "metric": "irradiance_w_m2", "value": round(720 + 150 * math.sin((2 * math.pi * day_offset) / 365) + (20 if site == "site-002" else 0), 2), "unit": "W/m2", "quality": {"state": "valid", "score": 1.0, "flags": []}},
             {"site_id": site, "asset_id": "weather-001" if site == "site-001" else "weather-101", "timestamp": timestamp.isoformat(), "metric": "temperature_c", "value": round(23 + 7 * math.sin((2 * math.pi * (day_offset + 35)) / 365), 2), "unit": "C", "quality": {"state": "valid", "score": 1.0, "flags": []}},

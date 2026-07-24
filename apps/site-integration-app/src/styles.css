@@ -2067,6 +2067,17 @@ tbody tr:focus-visible {
 }
 
 .ems-kpi-section { display: grid; gap: 10px; }
+.ems-data-families { display: grid; gap: 10px; }
+.ems-family-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ems-family-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.ems-family-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 700; }
+.ems-family-card-heading strong { min-width: 28px; padding: 3px 6px; border-radius: 999px; background: color-mix(in oklab, var(--primary) 12%, var(--surface)); color: var(--primary); font-size: 11px; text-align: center; }
+.ems-family-card p { min-height: 30px; margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.ems-family-card b { color: var(--ink); font-size: 16px; letter-spacing: -.02em; }
+.ems-family-inverter { border-top: 3px solid #4e8db5; }
+.ems-family-weather { border-top: 3px solid #5d9b8e; }
+.ems-family-site-energy { border-top: 3px solid #c28a49; }
+.ems-family-generation { border-top: 3px solid #8374b5; }
 .ems-range-toolbar {
   display: flex;
   align-items: center;
@@ -3233,6 +3244,7 @@ tbody tr:focus-visible {
   .ems-range-toolbar { align-items: stretch; flex-direction: column; }
   .ems-range-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ems-range-options button { padding: 0 5px; }
+  .ems-family-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .site-overview-metrics,
   .signal-dashboard,
   .ems-kpi-strip,

@@ -1,4 +1,4 @@
-const SUPPORTED_METRICS = ["energy_kwh", "irradiance_w_m2", "temperature_c"];
+const SUPPORTED_METRICS = ["energy_kwh", "ac_power_kw", "dc_power_kw", "irradiance_w_m2", "temperature_c"];
 
 function toArray(envelope) {
   return Array.isArray(envelope?.records) ? envelope.records : [];
@@ -57,12 +57,25 @@ export function buildEmsViewModel({ snapshot, observations, derived, catalog, lo
     }, {});
 
   const energySeries = normalizeSeries(recordsByMetric.energy_kwh ?? [], findCatalogRecord(catalogRecords, "energy_kwh")?.unit ?? "kWh");
+  const acPowerSeries = normalizeSeries(recordsByMetric.ac_power_kw ?? [], "kW");
+  const dcPowerSeries = normalizeSeries(recordsByMetric.dc_power_kw ?? [], "kW");
   const irradianceSeries = normalizeSeries(recordsByMetric.irradiance_w_m2 ?? [], findCatalogRecord(catalogRecords, "irradiance_w_m2")?.unit ?? "W/m²");
   const temperatureSeries = normalizeSeries(recordsByMetric.temperature_c ?? [], findCatalogRecord(catalogRecords, "temperature_c")?.unit ?? "°C");
   const performanceSeries = normalizeSeries(
     derivedRecords.filter((record) => (record?.metric_code ?? record?.metric) === "performance_ratio"),
     findCatalogRecord(catalogRecords, "performance_ratio")?.unit ?? "ratio",
   );
+  let cumulativeEnergy = 0;
+  const siteEnergySeries = energySeries.map((point) => {
+    cumulativeEnergy += Number.isFinite(point.value) ? point.value : 0;
+    return { ...point, cumulativeValue: cumulativeEnergy };
+  });
+  const generationReportSeries = performanceSeries.map((point, index) => {
+    const energyPoint = siteEnergySeries[index] ?? latestPoint(siteEnergySeries);
+    const actual = Number.isFinite(energyPoint?.value) ? energyPoint.value : null;
+    const performanceRatio = Number.isFinite(point.value) ? point.value : null;
+    return { ...point, actualEnergy: actual, expectedEnergy: actual !== null && performanceRatio ? actual / performanceRatio : null };
+  });
 
   const unsupportedCatalogMetrics = catalogRecords
     .filter((record) => record?.supported === false)
@@ -99,6 +112,9 @@ export function buildEmsViewModel({ snapshot, observations, derived, catalog, lo
       },
     },
     energySeries,
+    inverterSeries: { acPower: acPowerSeries, dcPower: dcPowerSeries },
+    siteEnergySeries,
+    generationReportSeries,
     weatherSeries: {
       irradiance: irradianceSeries,
       temperature: temperatureSeries,

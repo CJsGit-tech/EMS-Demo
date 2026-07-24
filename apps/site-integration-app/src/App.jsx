@@ -869,16 +869,20 @@ function buildEmsLiveCharts(viewModel, locale, rangeDays) {
     ? {
       kind: "現場讀值",
       energy: "發電量",
+      inverter: "逆變器觀測",
       irradiance: "日照強度",
       temperature: "環境溫度",
       performance: "績效比",
+      generationReport: "發電報表",
     }
     : {
       kind: "Live telemetry",
       energy: "Energy output",
+      inverter: "Inverter readings",
       irradiance: "Irradiance",
       temperature: "Temperature",
       performance: "Performance ratio",
+      generationReport: "Generation reports",
     };
 
   return [
@@ -905,6 +909,21 @@ function buildEmsLiveCharts(viewModel, locale, rangeDays) {
       data: viewModel.weatherSeries.irradiance.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), irradiance: point.value })),
     },
     {
+      id: "ems-inverter-live",
+      kindLabel: labels.kind,
+      title: labels.inverter,
+      type: "line",
+      unit: "kW",
+      xField: "time",
+      yFields: ["acPower", "dcPower"],
+      yLabels: { acPower: "AC", dcPower: "DC" },
+      data: viewModel.inverterSeries.acPower.map((point, index) => ({
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
+        acPower: point.value,
+        dcPower: viewModel.inverterSeries.dcPower[index]?.value,
+      })),
+    },
+    {
       id: "ems-temperature-live",
       kindLabel: labels.kind,
       title: labels.temperature,
@@ -927,6 +946,21 @@ function buildEmsLiveCharts(viewModel, locale, rangeDays) {
       data: viewModel.performance.series.map((point) => ({
         time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
         performance: Number.isFinite(point.value) ? point.value * 100 : point.value,
+      })),
+    },
+    {
+      id: "ems-generation-report-live",
+      kindLabel: labels.generationReport,
+      title: labels.generationReport,
+      type: "line",
+      unit: "kWh",
+      xField: "time",
+      yFields: ["actual", "expected"],
+      yLabels: { actual: labels.energy, expected: "Expected" },
+      data: viewModel.generationReportSeries.map((point) => ({
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
+        actual: point.actualEnergy,
+        expected: point.expectedEnergy,
       })),
     },
   ].filter((chart) => chart.data.length > 0);
@@ -963,6 +997,12 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
     { id: "irradiance", label: t("emsIrradiance"), value: formatMetric(viewModel.kpis.irradiance), detail: viewModel.kpis.irradiance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.irradiance.latest.timestamp, rangeOption.days, locale) : "—" },
     { id: "temperature", label: t("emsTemperature"), value: formatMetric(viewModel.kpis.temperature), detail: viewModel.kpis.temperature.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.temperature.latest.timestamp, rangeOption.days, locale) : "—" },
     { id: "performance", label: t("emsPerformance"), value: viewModel.performance.latest && Number.isFinite(viewModel.performance.latest.value) ? `${formatChartValue(viewModel.performance.latest.value * 100, "%")}` : t("emsNoData"), detail: viewModel.performance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.performance.latest.timestamp, rangeOption.days, locale) : "—" },
+  ] : [];
+  const dataFamilies = viewModel ? [
+    { id: "inverter", title: t("emsInverterTable"), subtitle: t("emsInverterMetrics"), count: viewModel.inverterSeries.acPower.length, value: viewModel.inverterSeries.acPower.at(-1)?.value, unit: "kW" },
+    { id: "weather", title: t("emsWeatherTable"), subtitle: t("emsWeatherMetrics"), count: Math.max(viewModel.weatherSeries.irradiance.length, viewModel.weatherSeries.temperature.length), value: viewModel.weatherSeries.irradiance.at(-1)?.value, unit: "W/m²" },
+    { id: "site-energy", title: t("emsSiteEnergyTable"), subtitle: t("emsSiteEnergyMetrics"), count: viewModel.siteEnergySeries.length, value: viewModel.kpis.energy.windowTotal, unit: "kWh" },
+    { id: "generation", title: t("emsGenerationTable"), subtitle: t("emsGenerationMetrics"), count: viewModel.generationReportSeries.length, value: viewModel.performance.latest?.value ? viewModel.performance.latest.value * 100 : null, unit: "%" },
   ] : [];
 
   return (
@@ -1009,6 +1049,21 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
           </div>
         </div>
       </section>
+
+      {dataFamilies.length > 0 ? (
+        <section className="ems-data-families" aria-label={t("emsDataFamiliesTitle")}>
+          <header className="ems-kpi-heading"><span className="section-kicker">{t("emsDataFamiliesTitle")}</span></header>
+          <div className="ems-family-grid">
+            {dataFamilies.map((family) => (
+              <article key={family.id} className={`ems-family-card ems-family-${family.id}`}>
+                <div className="ems-family-card-heading"><span>{family.title}</span><strong>{family.count}</strong></div>
+                <p>{family.subtitle}</p>
+                <b>{Number.isFinite(family.value) ? formatChartValue(family.value, family.unit) : t("emsNoData")}</b>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {kpiCards.length > 0 ? (
         <section className="ems-kpi-section" aria-label={t("emsKpiTitle")}>

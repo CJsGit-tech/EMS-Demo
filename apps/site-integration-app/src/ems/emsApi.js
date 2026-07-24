@@ -1,6 +1,6 @@
 const API_BASE = import.meta.env.VITE_AGENTCREW_API_URL || "http://localhost:8002/api/v1";
 
-const OBSERVATION_METRIC_CODES = ["energy_kwh", "irradiance_w_m2", "temperature_c"];
+const OBSERVATION_METRIC_CODES = ["energy_kwh", "ac_power_kw", "dc_power_kw", "irradiance_w_m2", "temperature_c"];
 const DERIVED_METRIC_CODES = ["performance_ratio"];
 
 function appendDateRange(query, from, to) {
