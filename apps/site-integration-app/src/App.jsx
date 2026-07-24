@@ -5,6 +5,7 @@ import {
   BatteryCharging,
   Bell,
   Building2,
+  CalendarDays,
   CheckCircle2,
   Gauge,
   MapPin,
@@ -1022,20 +1023,6 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
 
   return (
     <>
-      <section className="ems-range-toolbar" aria-label={t("emsRangeLabel")}>
-        <div>
-          <span className="section-kicker">{t("emsRangeLabel")}</span>
-          <strong>{t(rangeOption.labelKey)}</strong>
-          <small>{rangeWindow.from.toISOString().slice(0, 10)} → {rangeWindow.to.toISOString().slice(0, 10)}</small>
-        </div>
-        <div className="ems-range-options" role="group" aria-label={t("emsRangeLabel")}>
-          {EMS_RANGE_OPTIONS.map((option) => (
-            <button key={option.id} type="button" className={option.id === rangeKey ? "is-active" : ""} aria-pressed={option.id === rangeKey} onClick={() => onRangeChange(option.id)}>
-              {t(option.labelKey)}
-            </button>
-          ))}
-        </div>
-      </section>
       {liveState.status === "loading" && !viewModel ? (
         <section className="ems-loading-state" aria-busy="true" aria-live="polite">
           <div className="ems-loading-heading">
@@ -2531,6 +2518,16 @@ function App() {
                     {t(tab.labelKey)}
                   </button>
                 ))}
+                {siteTab === "realtime" ? (
+                  <div className="site-range-controls" role="group" aria-label={t("emsRangeLabel")}>
+                    {EMS_RANGE_OPTIONS.map((option) => (
+                      <button key={option.id} type="button" className={option.id === emsRangeKey ? "is-active" : ""} aria-pressed={option.id === emsRangeKey} onClick={() => setEmsRangeKey(option.id)}>
+                        {t(option.labelKey)}
+                      </button>
+                    ))}
+                    <button type="button" className="site-range-calendar" aria-label={t("emsRangeLabel")} title={t("emsRangeLabel")}><CalendarDays size={16} aria-hidden="true" /></button>
+                  </div>
+                ) : null}
               </div>
 
               {siteTab === "__legacy-overview" ? (

@@ -2024,8 +2024,8 @@ tbody tr:focus-visible {
 .site-detail-panel {
   min-width: 0;
   display: grid;
-  gap: 18px;
-  padding: 18px 20px 22px;
+  gap: 10px;
+  padding: 18px 0 22px;
 }
 
 .site-tabs {
@@ -3305,12 +3305,13 @@ tbody tr:focus-visible {
 /* Focused site workspace: three destinations, one clear operating surface. */
 .site-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 0;
+  min-height: 56px;
   padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--surface-strong) 70%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: color-mix(in oklab, var(--surface-strong) 62%, transparent);
 }
 
 .site-tabs button,
@@ -3322,10 +3323,56 @@ tbody tr:focus-visible {
 }
 
 .site-tabs button.is-active {
-  border-color: var(--line);
+  border-color: var(--primary);
   background: var(--bg);
   color: var(--ink);
-  box-shadow: 0 2px 6px color-mix(in oklab, var(--shadow-color) 10%, transparent);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.site-range-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  padding-left: 18px;
+}
+
+.site-range-controls button {
+  min-width: 68px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.site-range-controls button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.site-range-controls button:last-child {
+  border-right: 1px solid var(--line);
+}
+
+.site-range-controls button:hover,
+.site-range-controls button.is-active {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.site-range-controls .site-range-calendar {
+  display: grid;
+  min-width: 44px;
+  margin-left: 12px;
+  padding: 0;
+  place-items: center;
+  border-right: 1px solid var(--line);
+  border-radius: 4px;
 }
 
 .realtime-dashboard { display: grid; gap: 14px; }
@@ -3375,15 +3422,16 @@ tbody tr:focus-visible {
 .ems-metric-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  background: var(--line);
+  gap: 8px;
+  border: 0;
+  background: transparent;
 }
 
 .ems-metric-card {
   min-width: 0;
   min-height: 104px;
   padding: 15px 16px 13px;
+  border: 1px solid var(--line);
   background: color-mix(in oklab, var(--surface) 84%, var(--bg));
 }
 
@@ -3418,7 +3466,7 @@ tbody tr:focus-visible {
 
 .ems-primary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 2.15fr) minmax(280px, 1fr);
   gap: 10px;
 }
 
@@ -3453,6 +3501,10 @@ tbody tr:focus-visible {
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+
+.ems-module-heading > div > span {
+  display: none;
 }
 
 .ems-module-heading h2 {
@@ -3553,7 +3605,7 @@ tbody tr:focus-visible {
 
 .ems-lower-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
