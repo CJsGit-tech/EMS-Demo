@@ -10,9 +10,11 @@ import {
   MapPin,
   Minus,
   Moon,
+  Menu,
   Package,
   Plus,
   Search,
+  Sparkles,
   Sun,
   ThermometerSun,
   Truck,
@@ -20,11 +22,278 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { startTransition, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
-import worldAtlas from "world-atlas/countries-110m.json";
+import {
+  createContext,
+  startTransition,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import worldAtlas from "./data/world-atlas.json";
 import { createTranslator, i18nConfig } from "./i18nConfig";
 import { buildSiteWorkspace } from "./siteWorkspaceContent";
+import AgentCrewDrawer from "./agentcrew/AgentCrewDrawer";
+import { loadEmsDashboardData } from "./ems/emsApi";
+import { buildEmsViewModel } from "./ems/emsViewModel";
+
+const MAP_VIEW_WIDTH = 800;
+const MAP_VIEW_HEIGHT = 420;
+const MERCATOR_MAX_LATITUDE = 85.0511287798066;
+const PROJECTION_SCALE_GUARD = 172;
+const GEOGRAPHY_CONTEXT = createContext({
+  project: ([longitude, latitude]) => [
+    (((Number(longitude) || 0) + 180) / 360) * MAP_VIEW_WIDTH,
+    ((90 - (Number(latitude) || 0)) / 180) * MAP_VIEW_HEIGHT,
+  ],
+  width: MAP_VIEW_WIDTH,
+  height: MAP_VIEW_HEIGHT,
+});
+
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeBounds(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isCountryMatch(atlasCountry, targetCountry) {
+  if (!atlasCountry || !targetCountry) {
+    return false;
+  }
+
+  const atlasName = normalizeBounds(atlasCountry);
+  const targetName = normalizeBounds(targetCountry);
+
+  if (atlasName === targetName) {
+    return true;
+  }
+
+  if (atlasName.includes(targetName) || targetName.includes(atlasName)) {
+    return true;
+  }
+
+  return false;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function parseTopologyGeometries(topology) {
+  if (!topology || topology.type !== "Topology") {
+    return [];
+  }
+
+  const countryCollection = topology.objects?.countries ?? Object.values(topology.objects ?? {})[0];
+  return countryCollection?.geometries ?? [];
+}
+
+function decodeTopologyArc(topology, arcIndex, cache) {
+  const normalizedIndex = arcIndex < 0 ? -arcIndex - 1 : arcIndex;
+  if (cache.has(normalizedIndex)) {
+    const cachedArc = cache.get(normalizedIndex);
+    return arcIndex < 0 ? [...cachedArc].reverse() : cachedArc;
+  }
+
+  const arc = topology.arcs?.[normalizedIndex] ?? [];
+  const decoded = [];
+  let cursorX = 0;
+  let cursorY = 0;
+  const [scaleX, scaleY] = topology.transform?.scale ?? [1, 1];
+  const [translateX, translateY] = topology.transform?.translate ?? [0, 0];
+
+  for (const [deltaX, deltaY] of arc) {
+    cursorX += toNumber(deltaX);
+    cursorY += toNumber(deltaY);
+    decoded.push([cursorX * scaleX + translateX, cursorY * scaleY + translateY]);
+  }
+
+  cache.set(normalizedIndex, decoded);
+  return arcIndex < 0 ? [...decoded].reverse() : decoded;
+}
+
+function buildArcPointPath(topology, arcRefs, project, arcCache) {
+  if (!Array.isArray(arcRefs) || arcRefs.length === 0) {
+    return "";
+  }
+
+  const points = [];
+  for (const arcRef of arcRefs) {
+    const currentArc = decodeTopologyArc(topology, arcRef, arcCache);
+    if (currentArc.length === 0) {
+      continue;
+    }
+
+    if (points.length === 0) {
+      points.push(...currentArc);
+      continue;
+    }
+
+    points.push(...currentArc.slice(1));
+  }
+
+  let path = "";
+  let hasStart = false;
+  for (let index = 0; index < points.length; index += 1) {
+    const [rawLongitude, rawLatitude] = points[index];
+    const projected = project([rawLongitude, rawLatitude]);
+    if (!Number.isFinite(projected[0]) || !Number.isFinite(projected[1])) {
+      continue;
+    }
+
+    const command = hasStart ? "L" : "M";
+    hasStart = true;
+    path += `${command}${projected[0]} ${projected[1]}`;
+  }
+
+  if (path) {
+    path += "Z";
+  }
+
+  return path;
+}
+
+function buildGeographyPath(topology, geometry, project) {
+  if (!geometry || !Array.isArray(geometry.arcs) || !topology?.arcs) {
+    return "";
+  }
+
+  const arcCache = new Map();
+  const geometryArcs = geometry.arcs;
+  const rings = geometry.type === "MultiPolygon" ? geometryArcs : [geometryArcs];
+  let path = "";
+
+  for (const arcRefs of rings) {
+    if (!Array.isArray(arcRefs) || arcRefs.length === 0) {
+      continue;
+    }
+
+    if (arcRefs.length > 0 && !Array.isArray(arcRefs[0])) {
+      path += buildArcPointPath(topology, arcRefs, project, arcCache);
+      continue;
+    }
+
+    for (const singleRing of arcRefs) {
+      path += buildArcPointPath(topology, singleRing, project, arcCache);
+    }
+  }
+
+  return path;
+}
+
+function createProjection(type, projectionConfig = {}) {
+  const configScale = toNumber(projectionConfig.scale, 1);
+  const width = MAP_VIEW_WIDTH;
+  const height = MAP_VIEW_HEIGHT;
+  const configCenter = projectionConfig.center ?? [0, 0];
+
+  if (type === "geoMercator") {
+    const centerLongitude = toNumber(configCenter[0], 0) * Math.PI / 180;
+    const centerLatitude = toNumber(configCenter[1], 0);
+    const clampedCenterLat = clamp(centerLatitude, -MERCATOR_MAX_LATITUDE, MERCATOR_MAX_LATITUDE);
+    const centerY = Math.log(Math.tan(Math.PI / 4 + (clampedCenterLat * Math.PI) / 360));
+    const mercatorScale = Math.max(40, configScale);
+
+    return ([longitude, latitude]) => {
+      const lon = toNumber(longitude, 0) * Math.PI / 180;
+      const lat = clamp(toNumber(latitude, 0), -MERCATOR_MAX_LATITUDE, MERCATOR_MAX_LATITUDE);
+      const latRad = (lat * Math.PI) / 180;
+      const x = (width / 2) + mercatorScale * (lon - centerLongitude);
+      const y = (height / 2) - mercatorScale * (Math.log(Math.tan(Math.PI / 4 + latRad / 2)) - centerY);
+      return [x, y];
+    };
+  }
+
+  const projectionScale = Math.max(0.05, configScale / PROJECTION_SCALE_GUARD);
+  return ([longitude, latitude]) => {
+    const baseX = ((toNumber(longitude, 0) + 180) / 360) * width;
+    const baseY = ((90 - toNumber(latitude, 0)) / 180) * height;
+    const centeredX = (baseX - width / 2) * projectionScale + width / 2;
+    const centeredY = (baseY - height / 2) * projectionScale + height / 2;
+    return [centeredX, centeredY];
+  };
+}
+
+function buildMapGeographies(topology, project) {
+  const geometries = parseTopologyGeometries(topology);
+
+  return geometries.map((geometry, geometryIndex) => ({
+    ...geometry,
+    id: geometry.id ?? `${geometryIndex}`,
+    rsmKey: `${geometry.id ?? geometryIndex}`,
+    d: buildGeographyPath(topology, geometry, project),
+    type: geometry.type,
+  }));
+}
+
+const ComposableMap = ({ children, className = "", projection = "geoNaturalEarth1", projectionConfig = {} }) => {
+  const project = useMemo(() => createProjection(projection, projectionConfig), [projection, toNumber(projectionConfig.scale, 1), projectionConfig.center?.[0], projectionConfig.center?.[1]]);
+  const context = useMemo(() => ({
+    project,
+    width: MAP_VIEW_WIDTH,
+    height: MAP_VIEW_HEIGHT,
+  }), [project]);
+
+  return (
+    <GEOGRAPHY_CONTEXT.Provider value={context}>
+      <svg
+        className={`rsm-svg ${className}`}
+        viewBox={`0 0 ${MAP_VIEW_WIDTH} ${MAP_VIEW_HEIGHT}`}
+        role="presentation"
+      >
+        {children}
+      </svg>
+    </GEOGRAPHY_CONTEXT.Provider>
+  );
+};
+
+const ZoomableGroup = ({ children, center = [0, 0], zoom = 1 }) => {
+  const { project, width, height } = useContext(GEOGRAPHY_CONTEXT);
+  const safeZoom = clamp(toNumber(zoom, 1), 0.25, 12);
+  const [originLongitude, originLatitude] = center;
+  const focus = project([toNumber(originLongitude, 0), toNumber(originLatitude, 0)]);
+  const transform = `translate(${width / 2} ${height / 2}) scale(${safeZoom}) translate(${-focus[0]} ${-focus[1]})`;
+
+  return <g transform={transform}>{children}</g>;
+};
+
+const Geographies = ({ children, geography = worldAtlas, parseGeographies }) => {
+  const { project } = useContext(GEOGRAPHY_CONTEXT);
+  const mapGeographies = useMemo(() => {
+    const resolvedGeographies = buildMapGeographies(geography, project);
+    if (typeof parseGeographies === "function") {
+      return parseGeographies(resolvedGeographies);
+    }
+    return resolvedGeographies;
+  }, [geography, project, parseGeographies]);
+
+  return children({ geographies: mapGeographies });
+};
+
+const Geography = ({ geography, className = "", style = {} }) => {
+  if (!geography?.d) {
+    return null;
+  }
+
+  return <path className={`rsm-geography ${className}`} d={geography.d} style={style} />;
+};
+
+const Marker = ({ children, coordinates = [0, 0] }) => {
+  const { project } = useContext(GEOGRAPHY_CONTEXT);
+  const [x, y] = project([toNumber(coordinates?.[0], 0), toNumber(coordinates?.[1], 0)]);
+
+  return <g transform={`translate(${x} ${y})`}>{children}</g>;
+};
 
 const workflowGroups = [
   { label: "發電預測與優化", icon: Zap },
@@ -325,6 +594,14 @@ const systemModules = workflowGroups.map((workflow, index) => ({
   cadence: ["15 min", "30 min", "Hourly", "Daily"][index % 4],
 }));
 
+const portfolioScreens = [
+  { id: "overview", labelKey: "overview" },
+  { id: "sites", labelKey: "allSites" },
+  { id: "issues", labelKey: "priorityIssues" },
+  { id: "systems", labelKey: "emsWorkflows" },
+  { id: "reports", labelKey: "reports" },
+];
+
 const siteTabs = [
   { id: "overview", labelKey: "overview" },
   { id: "devices", labelKey: "devices" },
@@ -333,9 +610,6 @@ const siteTabs = [
   { id: "alerts", labelKey: "alerts" },
   { id: "site", labelKey: "siteTab" },
 ];
-
-let switchTimer = 0;
-let noticeTimer = 0;
 
 function getRegionKey(region) {
   return region.toLowerCase().replaceAll(" ", "-");
@@ -572,23 +846,195 @@ function SignalPanel({ chart, compact = false }) {
   );
 }
 
+function formatEmsChartTimestamp(timestamp) {
+  if (typeof timestamp !== "string") {
+    return "—";
+  }
+
+  return timestamp.slice(11, 16) || timestamp;
+}
+
+function buildEmsLiveCharts(viewModel, locale) {
+  const labels = locale === "zh-TW"
+    ? {
+      kind: "現場讀值",
+      energy: "發電量",
+      irradiance: "日照強度",
+      temperature: "環境溫度",
+      performance: "績效比",
+    }
+    : {
+      kind: "Live telemetry",
+      energy: "Energy output",
+      irradiance: "Irradiance",
+      temperature: "Temperature",
+      performance: "Performance ratio",
+    };
+
+  return [
+    {
+      id: "ems-energy-live",
+      kindLabel: labels.kind,
+      title: labels.energy,
+      type: "line",
+      unit: "kWh",
+      xField: "time",
+      yFields: ["energy"],
+      yLabels: { energy: labels.energy },
+      data: viewModel.energySeries.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), energy: point.value })),
+    },
+    {
+      id: "ems-irradiance-live",
+      kindLabel: labels.kind,
+      title: labels.irradiance,
+      type: "line",
+      unit: "W/m²",
+      xField: "time",
+      yFields: ["irradiance"],
+      yLabels: { irradiance: labels.irradiance },
+      data: viewModel.weatherSeries.irradiance.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), irradiance: point.value })),
+    },
+    {
+      id: "ems-temperature-live",
+      kindLabel: labels.kind,
+      title: labels.temperature,
+      type: "line",
+      unit: "°C",
+      xField: "time",
+      yFields: ["temperature"],
+      yLabels: { temperature: labels.temperature },
+      data: viewModel.weatherSeries.temperature.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), temperature: point.value })),
+    },
+    {
+      id: "ems-performance-live",
+      kindLabel: labels.kind,
+      title: labels.performance,
+      type: "line",
+      unit: "%",
+      xField: "time",
+      yFields: ["performance"],
+      yLabels: { performance: labels.performance },
+      data: viewModel.performance.series.map((point) => ({
+        time: formatEmsChartTimestamp(point.timestamp),
+        performance: Number.isFinite(point.value) ? point.value * 100 : point.value,
+      })),
+    },
+  ].filter((chart) => chart.data.length > 0);
+}
+
+function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
+  const isLive = liveState.source === "postgresql" && (liveState.status === "fresh" || liveState.status === "empty");
+  const sourceLabel = isLive ? t("emsPostgresSource") : t("emsFixtureSource");
+  const statusLabel = liveState.status === "loading"
+    ? t("emsLoading")
+    : liveState.status === "unauthorized" || liveState.status === "unavailable" || liveState.status === "degraded"
+      ? t("emsUnavailable")
+      : sourceLabel;
+  const signals = viewModel
+    ? buildEmsLiveCharts(viewModel, locale)
+    : liveState.status === "demo"
+      ? fallbackSignals
+      : [];
+  const formatMetric = (metric, suffix = "") => {
+    if (metric?.state !== "ready" || !metric.latest || !Number.isFinite(metric.latest.value)) {
+      return t("emsNoData");
+    }
+    return `${formatChartValue(metric.latest.value, metric.latest.unit)}${suffix}`;
+  };
+  const kpiCards = viewModel ? [
+    { id: "energy-window", label: t("emsEnergyWindow"), value: viewModel.kpis.energy.state === "ready" ? `${formatChartValue(viewModel.kpis.energy.windowTotal, "kWh")}` : t("emsNoData"), detail: formatMetric(viewModel.kpis.energy) },
+    { id: "irradiance", label: t("emsIrradiance"), value: formatMetric(viewModel.kpis.irradiance), detail: viewModel.kpis.irradiance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.irradiance.latest.timestamp) : "—" },
+    { id: "temperature", label: t("emsTemperature"), value: formatMetric(viewModel.kpis.temperature), detail: viewModel.kpis.temperature.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.temperature.latest.timestamp) : "—" },
+    { id: "performance", label: t("emsPerformance"), value: viewModel.performance.latest && Number.isFinite(viewModel.performance.latest.value) ? `${formatChartValue(viewModel.performance.latest.value * 100, "%")}` : t("emsNoData"), detail: viewModel.performance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.performance.latest.timestamp) : "—" },
+  ] : [];
+
+  return (
+    <>
+      <section className="workspace-card workspace-card-live-data" data-testid="ems-live-data-card" aria-label={t("emsDataTitle")}>
+        <header className="detail-section-header">
+          <div>
+            <span className="section-kicker">{t("emsDataSource")}</span>
+            <h3>{t("emsDataTitle")}</h3>
+          </div>
+          <p>{statusLabel}</p>
+        </header>
+        <p>{t("emsDataBody")}</p>
+        <div className="module-command-metrics">
+          <div>
+            <span>{t("emsDataSource")}</span>
+            <strong>{sourceLabel}</strong>
+          </div>
+          <div>
+            <span>{t("emsDataFreshness")}</span>
+            <strong>{viewModel?.health.freshness ?? liveState.snapshot?.freshness?.state ?? liveState.status}</strong>
+          </div>
+          <div>
+            <span>{t("emsDataQuality")}</span>
+            <strong>{viewModel?.health.quality ?? liveState.snapshot?.quality?.state ?? "—"}</strong>
+          </div>
+          <div>
+            <span>{t("emsDataAssets")}</span>
+            <strong>{viewModel?.assets.length ?? "—"}</strong>
+          </div>
+        </div>
+      </section>
+
+      {kpiCards.length > 0 ? (
+        <section className="ems-kpi-section" aria-label={t("emsKpiTitle")}>
+          <div className="ems-kpi-heading"><span className="section-kicker">{t("emsKpiTitle")}</span></div>
+          <div className="summary-grid ems-kpi-strip">
+            {kpiCards.map((card) => (
+              <article key={card.id} className="ems-kpi-card">
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.detail}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {signals.length > 0 ? (
+        <section className="signal-dashboard signal-dashboard-featured" aria-label={t("emsSignalsTitle")}>
+          {signals.map((chart) => (
+            <SignalPanel key={chart.id} chart={chart} />
+          ))}
+        </section>
+      ) : null}
+    </>
+  );
+}
+
 function pushRoute(fragment) {
   if (window.location.hash !== `#${fragment}`) {
     window.history.pushState(null, "", `#${fragment}`);
   }
 }
 
-function readStoredPreference(key, queryKey, fallback) {
+function readStoredPreference(key, queryKey, fallback, isValid = () => true) {
   if (typeof window === "undefined") {
     return fallback;
   }
 
-  const queryValue = new URLSearchParams(window.location.search).get(queryKey);
-  if (queryValue) {
-    return queryValue;
-  }
+  try {
+    const queryValue = new URLSearchParams(window.location.search).get(queryKey);
+    if (queryValue && isValid(queryValue)) {
+      return queryValue;
+    }
 
-  return window.localStorage.getItem(key) ?? fallback;
+    const storedValue = window.localStorage.getItem(key);
+    return storedValue && isValid(storedValue) ? storedValue : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredPreference(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be unavailable in private or embedded browsing contexts.
+  }
 }
 
 function App() {
@@ -602,26 +1048,93 @@ function App() {
   const [previewMode, setPreviewMode] = useState("site");
   const [drillCountry, setDrillCountry] = useState(null);
   const [countryAtlasData, setCountryAtlasData] = useState(null);
+  const [countryAtlasError, setCountryAtlasError] = useState(false);
+  const [countryAtlasLoadAttempt, setCountryAtlasLoadAttempt] = useState(0);
   const [previewAnchor, setPreviewAnchor] = useState(null);
   const [mapZoomOffset, setMapZoomOffset] = useState(0);
   const [siteTab, setSiteTab] = useState("overview");
+  const [isAgentCrewOpen, setIsAgentCrewOpen] = useState(false);
+  const [emsLiveState, setEmsLiveState] = useState({ status: "loading", source: "postgresql", snapshot: null, model: null, error: null });
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [reportSearch, setReportSearch] = useState("");
   const [reportCadenceFilter, setReportCadenceFilter] = useState("all");
   const [notice, setNotice] = useState("");
-  const [locale, setLocale] = useState(() => readStoredPreference("verde-locale", "locale", i18nConfig.defaultLocale));
+  const [locale, setLocale] = useState(() => readStoredPreference(
+    "verde-locale",
+    "locale",
+    i18nConfig.defaultLocale,
+    (value) => i18nConfig.locales.some((language) => language.id === value),
+  ));
   const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => readStoredPreference("verde-theme", "theme", "light"));
+  const [isPrimaryNavOpen, setIsPrimaryNavOpen] = useState(false);
+  const [theme, setTheme] = useState(() => readStoredPreference("verde-theme", "theme", "light", (value) => value === "light" || value === "dark"));
   const searchInputRef = useRef(null);
   const mapStageRef = useRef(null);
   const localeMenuRef = useRef(null);
+  const switchTimerRef = useRef(0);
+  const noticeTimerRef = useRef(0);
   const deferredSearch = useDeferredValue(searchValue);
   const t = useMemo(() => createTranslator(locale), [locale]);
 
   const selectedSite = siteData.find((site) => site.id === selectedSiteId) ?? siteData[0];
+  const activeAgentCrewContext = activeScreen === "site-detail" && selectedSite
+    ? {
+      siteId: selectedSite.id,
+      siteName: selectedSite.name,
+      userId: "manager-1",
+      sourceRoute: `#site/${selectedSite.id}/${siteTab}`,
+    }
+    : null;
+  useEffect(() => {
+    if (activeScreen !== "site-detail" || !selectedSite) return undefined;
+    const controller = new AbortController();
+    const siteCode = selectedSite.id === "tokyo-campus" ? "site-001" : "site-002";
+
+    setEmsLiveState((state) => ({ ...state, status: "loading", source: "postgresql", error: null }));
+
+    loadEmsDashboardData({
+      siteCode,
+      userId: "demo-user",
+      signal: controller.signal,
+    })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        const model = buildEmsViewModel({
+          ...payload,
+          locale,
+          siteCode,
+        });
+
+        setEmsLiveState({
+          status: model.health.state === "unavailable" ? "empty" : "fresh",
+          source: "postgresql",
+          snapshot: payload.snapshot,
+          model,
+          error: null,
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setEmsLiveState({
+          status: error?.kind ?? "degraded",
+          source: "postgresql",
+          snapshot: null,
+          model: null,
+          error,
+        });
+      });
+
+    return () => { controller.abort(); };
+  }, [activeScreen, locale, selectedSite]);
   const activeLocaleOption = i18nConfig.locales.find((language) => language.id === locale) ?? i18nConfig.locales[0];
   const hasExplicitSiteSelection = Boolean(selectedSiteId);
-  const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale), [locale, selectedSite]);
+  const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale, emsLiveState), [locale, selectedSite, emsLiveState]);
   const siteReports = siteWorkspace.reports;
   const siteAlerts = siteWorkspace.alerts ?? [];
   const alertSummaryMetrics = useMemo(() => {
@@ -668,7 +1181,6 @@ function App() {
   const siteProfile = siteWorkspace.site ?? null;
   const overviewSignals = siteWorkspace.charts?.overview ?? [];
   const deviceSignals = siteWorkspace.charts?.devices ?? [];
-  const emsSignals = siteWorkspace.charts?.ems ?? [];
   const siteModuleDetails = siteWorkspace.modules.map((module) => {
     const baseModule = systemModules.find((systemModule) => systemModule.label === module.workflow);
     return {
@@ -685,13 +1197,18 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem("verde-theme", theme);
+    writeStoredPreference("verde-theme", theme);
   }, [theme]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    window.localStorage.setItem("verde-locale", locale);
+    writeStoredPreference("verde-locale", locale);
   }, [locale]);
+
+  useEffect(() => () => {
+    window.clearTimeout(switchTimerRef.current);
+    window.clearTimeout(noticeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -717,22 +1234,67 @@ function App() {
 
   useEffect(() => {
     function syncRoute() {
-      const route = window.location.hash.replace("#", "");
-      if (route.startsWith("site/")) {
-        const [, siteId, requestedTab] = route.split("/");
-        if (siteData.some((site) => site.id === siteId)) {
-          setSelectedSiteId(siteId);
-          setActiveScreen("site-detail");
-          if (siteTabs.some((tab) => tab.id === requestedTab)) {
-            setSiteTab(requestedTab);
-          }
-        }
+      const route = window.location.hash.replace("#", "").trim().toLowerCase();
+      setIsPrimaryNavOpen(false);
+
+      if (!route || route === "overview") {
+        setActiveScreen("overview");
+        setSelectedSiteId(null);
+        setSiteTab("overview");
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
         return;
       }
 
-      if (route === "overview") {
-        setActiveScreen(route);
+      if (route.startsWith("site/")) {
+        const [, siteId, requestedTab] = route.split("/");
+        let normalizedSiteId = "";
+        try {
+          normalizedSiteId = decodeURIComponent(siteId || "");
+        } catch {
+          normalizedSiteId = siteId || "";
+        }
+        if (normalizedSiteId && siteData.some((site) => site.id === normalizedSiteId)) {
+          setSelectedSiteId(normalizedSiteId);
+          setActiveScreen("site-detail");
+          setActiveMarkerId(null);
+          setIsMapPreviewOpen(false);
+          setPreviewMode("site");
+          setDrillCountry(null);
+          setSiteTab(siteTabs.some((tab) => tab.id === requestedTab) ? requestedTab : "overview");
+          return;
+        }
+
+        setActiveScreen("overview");
+        setSelectedSiteId(null);
+        setSiteTab("overview");
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
+        return;
       }
+
+      if (route === "sites" || route === "issues" || route === "systems" || route === "reports") {
+        setActiveScreen(route);
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
+        setSiteTab("overview");
+        setSelectedSiteId(null);
+        return;
+      }
+
+      setActiveScreen("overview");
+      setSelectedSiteId(null);
+      setSiteTab("overview");
+      setActiveMarkerId(null);
+      setIsMapPreviewOpen(false);
+      setPreviewMode("site");
+      setDrillCountry(null);
     }
 
     syncRoute();
@@ -748,6 +1310,10 @@ function App() {
       return null;
     });
   }, [siteReports]);
+
+  useEffect(() => {
+    setIsAgentCrewOpen(false);
+  }, [selectedSiteId]);
 
   const filteredSites = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -768,7 +1334,7 @@ function App() {
     const view = mapViews[regionFilter] ?? mapViews.all;
     return {
       ...view,
-      zoom: Math.min(4.1, Math.max(1, view.zoom + mapZoomOffset)),
+      zoom: Math.min(4.1, Math.max(0.65, view.zoom + mapZoomOffset)),
     };
   }, [mapZoomOffset, regionFilter]);
 
@@ -888,7 +1454,7 @@ function App() {
 
     return {
       center: getAverageCoordinates(countrySites),
-      zoom: Math.min(8.4, Math.max(baseMapView.zoom, getCountryZoom(countrySites) + mapZoomOffset)),
+      zoom: Math.min(8.4, Math.max(0.65, getCountryZoom(countrySites) + mapZoomOffset)),
     };
   }, [baseMapView, countrySites, mapZoomOffset, shouldZoomToCountry]);
 
@@ -929,16 +1495,23 @@ function App() {
 
     let ignore = false;
 
-    import("world-atlas/countries-50m.json").then((module) => {
-      if (!ignore) {
-        setCountryAtlasData(module.default);
-      }
-    });
+    setCountryAtlasError(false);
+    import("./data/world-atlas-50m.json")
+      .then((module) => {
+        if (!ignore) {
+          setCountryAtlasData(module.default);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setCountryAtlasError(true);
+        }
+      });
 
     return () => {
       ignore = true;
     };
-  }, [countryAtlasData, isCountryDrill]);
+  }, [countryAtlasData, countryAtlasLoadAttempt, isCountryDrill]);
 
   useLayoutEffect(() => {
     if (!isMapPreviewOpen || !activeMarkerId || previewMode === "country" || isCountryDrill) {
@@ -1029,8 +1602,8 @@ function App() {
     startTransition(() => {
       setSelectedSiteId(siteId);
     });
-    window.clearTimeout(switchTimer);
-    switchTimer = window.setTimeout(() => {
+    window.clearTimeout(switchTimerRef.current);
+    switchTimerRef.current = window.setTimeout(() => {
       setIsSwitching(false);
     }, 180);
   }
@@ -1046,6 +1619,7 @@ function App() {
   }
 
   function handleNavigate(screenId) {
+    setIsPrimaryNavOpen(false);
     setIsMapPreviewOpen(false);
     setActiveMarkerId(null);
     setPreviewMode("site");
@@ -1090,6 +1664,16 @@ function App() {
     setMapZoomOffset(0);
     setActiveScreen("overview");
     pushRoute("overview");
+  }
+
+  function handleMapWheel(event) {
+    if (event.target?.closest?.("button, a, input, select, textarea")) {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 1 : -1;
+    setMapZoomOffset((zoom) => Math.min(1.4, Math.max(-0.45, zoom + direction * 0.2)));
   }
 
   function handleMapMarkerKeyDown(event, group) {
@@ -1155,8 +1739,8 @@ function App() {
 
   function announce(message) {
     setNotice(message);
-    window.clearTimeout(noticeTimer);
-    noticeTimer = window.setTimeout(() => setNotice(""), 2200);
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(""), 2200);
   }
 
   return (
@@ -1182,7 +1766,47 @@ function App() {
             <h1>{selectedSite.name}</h1>
           </div>
         ) : null}
+        {activeScreen !== "site-detail" ? (
+          <nav className="topnav" aria-label={t("mapNavigation")}>
+            {portfolioScreens.map((screen) => (
+              <button
+                key={screen.id}
+                type="button"
+                className={activeScreen === screen.id ? "is-active" : ""}
+                aria-current={activeScreen === screen.id ? "page" : undefined}
+                onClick={() => handleNavigate(screen.id)}
+              >
+                {t(screen.labelKey)}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        {activeScreen !== "site-detail" ? (
+          <button
+            type="button"
+            className={`icon-button compact-menu ${isPrimaryNavOpen ? "is-active" : ""}`}
+            aria-label={t("mapNavigation")}
+            aria-expanded={isPrimaryNavOpen}
+            aria-controls="primary-mobile-nav"
+            onClick={() => setIsPrimaryNavOpen((current) => !current)}
+          >
+            {isPrimaryNavOpen ? <X size={16} /> : <Menu size={16} />}
+          </button>
+        ) : null}
         <div className="top-actions">
+          {activeAgentCrewContext ? (
+            <button
+              type="button"
+              className={`agentcrew-launcher ${isAgentCrewOpen ? "is-active" : ""}`}
+              onClick={() => setIsAgentCrewOpen((current) => !current)}
+              aria-expanded={isAgentCrewOpen}
+              aria-controls="agentcrew-drawer"
+            >
+              <Sparkles size={15} />
+              <span>AgentCrew</span>
+              <small>Site scoped</small>
+            </button>
+          ) : null}
           <div ref={localeMenuRef} className="locale-menu">
             <button
               type="button"
@@ -1241,6 +1865,21 @@ function App() {
             <span>OC</span>
           </button>
         </div>
+        {activeScreen !== "site-detail" && isPrimaryNavOpen ? (
+          <div id="primary-mobile-nav" className="mobile-nav is-open" role="navigation" aria-label={t("mapNavigation")}>
+            {portfolioScreens.map((screen) => (
+              <button
+                key={`mobile-${screen.id}`}
+                type="button"
+                className={activeScreen === screen.id ? "is-active" : ""}
+                aria-current={activeScreen === screen.id ? "page" : undefined}
+                onClick={() => handleNavigate(screen.id)}
+              >
+                {t(screen.labelKey)}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
 
       <main className="workspace" id="main-content">
@@ -1266,6 +1905,7 @@ function App() {
           ref={mapStageRef}
           className={`map-stage is-fullscreen ${isMapPreviewOpen ? "has-preview" : ""}`}
           aria-label={t("mapStageAria")}
+          onWheel={handleMapWheel}
         >
           <div className="map-scope-card" aria-label={t("areaSelectorHint")}>
             <header>
@@ -1294,6 +1934,7 @@ function App() {
             <button
               type="button"
               aria-label={t("zoomIn")}
+              disabled={mapZoomOffset >= 1.4}
               onClick={() => setMapZoomOffset((zoom) => Math.min(1.4, zoom + 0.35))}
             >
               <Plus size={15} />
@@ -1301,7 +1942,8 @@ function App() {
             <button
               type="button"
               aria-label={t("zoomOut")}
-              onClick={() => setMapZoomOffset((zoom) => Math.max(0, zoom - 0.35))}
+              disabled={mapZoomOffset <= -0.45}
+              onClick={() => setMapZoomOffset((zoom) => Math.max(-0.45, zoom - 0.35))}
             >
               <Minus size={15} />
             </button>
@@ -1337,7 +1979,9 @@ function App() {
               {countryAtlasData ? (
               <Geographies
                 geography={countryAtlasData}
-                parseGeographies={(geographies) => geographies.filter((geography) => geography.properties.name === drillCountry)}
+                parseGeographies={(geographies) =>
+                  geographies.filter((geography) => isCountryMatch(geography.properties?.name, drillCountry))
+                }
               >
                 {({ geographies }) =>
                   geographies.map((geography) => (
@@ -1372,7 +2016,7 @@ function App() {
                     }}
                   >
                     <title>{`${site.name}: ${t(statusMeta[site.status].labelKey)}`}</title>
-                    <circle className="marker-hit-area" r="16" />
+                    <circle className="marker-hit-area" r="45" />
                     <circle className="marker-halo" r="9.5" />
                     <circle className="marker-core" r="5.2" />
                   </g>
@@ -1415,7 +2059,7 @@ function App() {
                       onKeyDown={(event) => handleMapMarkerKeyDown(event, group)}
                     >
                       <title>{`${group.count > 1 ? getGroupDisplayName(group) : group.leadSite.name}: ${t(statusMeta[group.status].labelKey)}`}</title>
-                      <circle className="marker-hit-area" r={group.count > 1 ? "18" : "16"} />
+                      <circle className="marker-hit-area" r="45" />
                       {group.count > 1 ? <circle className="marker-group-halo" r="14.5" /> : null}
                       <circle className="marker-halo" r={group.count > 1 ? "11.8" : "11"} />
                       <circle className="marker-core" r="5.8" />
@@ -1438,6 +2082,22 @@ function App() {
               </ZoomableGroup>
             </ComposableMap>
           )}
+
+          {isCountryDrill && countryAtlasError ? (
+            <div className="map-empty-state map-data-error" role="status">
+              <strong>{t("mapDataUnavailable")}</strong>
+              <span>{t("mapDataUnavailableBody")}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCountryAtlasData(null);
+                  setCountryAtlasLoadAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {t("retryMapData")}
+              </button>
+            </div>
+          ) : null}
 
           {isMapPreviewOpen ? (
           <article
@@ -1932,13 +2592,13 @@ function App() {
                     <p>{t("emsTabBody")}</p>
                   </section>
 
-                  {emsSignals.length > 0 ? (
-                    <section className="signal-dashboard signal-dashboard-featured" aria-label={t("emsSignalsTitle")}>
-                      {emsSignals.map((chart) => (
-                        <SignalPanel key={`${selectedSite.id}-${chart.id}`} chart={chart} />
-                      ))}
-                    </section>
-                  ) : null}
+                  <EmsDashboard
+                    liveState={emsLiveState}
+                    viewModel={emsLiveState.model}
+                    fallbackSignals={siteWorkspace.charts?.ems ?? []}
+                    t={t}
+                    locale={locale}
+                  />
 
                   <section className="workspace-card workspace-card-muted">
                     <header className="detail-section-header">
@@ -2269,6 +2929,12 @@ function App() {
           </section>
         ) : null}
       </main>
+      {activeAgentCrewContext && isAgentCrewOpen ? (
+        <AgentCrewDrawer
+          siteContext={activeAgentCrewContext}
+          onClose={() => setIsAgentCrewOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
