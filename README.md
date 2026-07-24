@@ -162,10 +162,42 @@ Root-level `PRODUCT.md`, `DESIGN.md`, and `REQUEST.md` are compatibility pointer
 
 ## Local Development
 
-At the moment, `site-integration-app` and `internal-operations-app` are runnable
-as frontend apps. The site integration app can also read the EMS API when the
-local PostgreSQL service and API are running. Each app manages its dependencies
-independently.
+The quickest path is Docker Compose. It starts PostgreSQL, applies the real EMS
+schema migrations, loads deterministic synthetic values, starts the API, and
+serves the site workspace.
+
+### One-command local setup
+
+Requirements: Docker Desktop with Compose v2.
+
+```bash
+git clone <repository-url>
+cd EMS-Demo
+cp .env.example .env.local
+docker compose up --build
+```
+
+Open [http://localhost:5180](http://localhost:5180) for the site workspace or
+[http://localhost:8004/docs](http://localhost:8004/docs) for the API contract.
+
+The first startup creates the `ems` PostgreSQL schema through Alembic and runs
+the idempotent `seed-ems` command. The seed is synthetic, covers one year of
+site observations and calculated metrics, and is safe to rerun. Stop the stack
+with `Ctrl+C`, or run `docker compose down`. Keep the named volume when you
+want to preserve the local database; add `-v` only when you intentionally want
+to reset it.
+
+### Manual frontend development
+
+Use this mode when iterating on React files while keeping PostgreSQL and the API
+in Docker:
+
+```bash
+docker compose up -d postgres api
+cd apps/site-integration-app
+npm install
+VITE_AGENTCREW_API_URL=http://127.0.0.1:8004/api/v1 npm run dev -- --host 0.0.0.0 --port 5180
+```
 
 Run the site integration app:
 
@@ -194,11 +226,19 @@ boundary for site metadata, time-series observations, calculated metrics, and
 source lineage; the frontend should not calculate long-range metrics on every
 screen render.
 
-Typical local services:
+The Compose services are:
+
+| Service | Responsibility | Host address |
+|---|---|---|
+| `postgres` | PostgreSQL persistence for EMS and AgentCrew tables | `localhost:5432` |
+| `api` | FastAPI site reads, calculated metrics, reports, and MCP contracts | `localhost:8004` |
+| `site-integration` | Production build of the React site | `localhost:5180` |
+
+Typical local services without Docker:
 
 ```bash
-# Start the local PostgreSQL service configured by the project
-docker compose up -d postgres
+# Start PostgreSQL and the API, including migrations and synthetic seed data
+docker compose up -d postgres api
 
 # Start the API
 cd services/ems-api
@@ -208,6 +248,18 @@ PYTHONPATH=src .venv/bin/python -m uvicorn agentcrew.app:app --host 0.0.0.0 --po
 cd apps/site-integration-app
 VITE_AGENTCREW_API_URL=http://127.0.0.1:8004/api/v1 npm run dev -- --host 0.0.0.0 --port 5180
 ```
+
+To seed a manually started API database after migrations:
+
+```bash
+cd services/ems-api
+PYTHONPATH=src .venv/bin/python -m agentcrew seed-ems --seed-version 3
+```
+
+The frontend reads site snapshots, observations, reports, and metric catalogs
+from the API. Long-range calculations are persisted in
+`ems.derived_metric_values`; the dashboard does not recompute a year's worth of
+data in the browser.
 
 The API uses deterministic fixture values for the demo, but the schema and
 retrieval paths are designed to match the production PostgreSQL contract.
