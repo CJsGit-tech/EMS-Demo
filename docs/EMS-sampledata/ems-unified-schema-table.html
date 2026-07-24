@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMS Unified Database Schema</title>
+  <style>
+    :root { --ink:oklch(0.24 0.028 155); --muted:oklch(0.46 0.018 155); --quiet:oklch(0.58 0.015 145); --line:oklch(0.885 0.015 145); --line-strong:oklch(0.78 0.028 145); --paper:oklch(0.975 0.006 145); --surface:#fff; --blue:oklch(0.42 0.105 140); --blue-soft:oklch(0.91 0.03 142); --gold:oklch(0.49 0.115 78); --gold-soft:oklch(0.95 0.045 82); --green:oklch(0.48 0.115 145); --green-soft:oklch(0.92 0.035 145); --red:oklch(0.55 0.19 31); --red-soft:oklch(0.95 0.035 31); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width:1280px; margin:0 auto; padding:40px 24px 64px; }
+    header { border-bottom:1px solid var(--line); padding-bottom:25px; margin-bottom:28px; }
+    .eyebrow { color:var(--blue); font-size:12px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+    h1 { font-size:46px; line-height:.98; letter-spacing:-.025em; margin:10px 0 14px; text-wrap:balance; }
+    h2 { margin:32px 0 12px; font-size:22px; line-height:1.15; letter-spacing:0; text-wrap:balance; }
+    h3 { margin:0 0 8px; font-size:16px; }
+    p { color:var(--muted); max-width:930px; }
+    .lede { font-size:18px; }
+    .callout { background:var(--blue-soft); border:1px solid var(--line-strong); border-radius:8px; padding:16px 18px; margin:20px 0; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+    .erd { overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:14px; }
+    .erd svg { display:block; min-width:1200px; width:100%; height:auto; }
+    .erd .rel { stroke:#64748b; stroke-width:2; fill:none; marker-end:url(#erd-arrow); }
+    .erd .rel-label { fill:#64748b; font-size:12px; font-weight:700; }
+    .erd .tbl { stroke:#8da2b5; stroke-width:1.5; filter:url(#shadow); }
+    .erd .tbl-head { fill:#8bc5a0; stroke:#4d9868; stroke-width:1.5; }
+    .erd .tbl-head.core { fill:#71b98c; stroke:#3d8b5a; }
+    .erd .tbl-head.fact { fill:#b9d9c2; stroke:#6b9f79; }
+    .erd .tbl-head.lineage { fill:#e4c681; stroke:#bd8c32; }
+    .erd .tbl-head.quality { fill:#e7aaa1; stroke:#bd6b5f; }
+    .erd .tbl-title { fill:#102a43; font-size:15px; font-weight:800; }
+    .erd .tbl-col { fill:#243b53; font-size:12px; }
+    .erd .tbl-key { fill:#a56b08; font-weight:800; }
+    .erd .tbl-type { fill:#627d98; font-size:11px; }
+    .erd .tbl-divider { stroke:#d5dee8; stroke-width:1; }
+    .tabs { display:flex; flex-wrap:wrap; gap:6px; margin:26px 0 18px; padding:5px; background:oklch(0.975 0.006 145); border:1px solid var(--line); border-radius:8px; }
+    .tab-button { appearance:none; border:0; border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; font:700 13px/1.2 inherit; min-height:40px; padding:10px 13px; transition:background .15s ease, color .15s ease, box-shadow .15s ease; }
+    .tab-button:hover { color:var(--ink); background:#fff; }
+    .tab-button[aria-selected="true"] { background:var(--surface); color:var(--blue); box-shadow:0 1px 3px color-mix(in oklab, var(--ink) 12%, transparent); }
+    .tab-button:focus-visible, .table-tab:focus-visible, .subtable-tab:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+    .tab-panel { display:none; }
+    .tab-panel.is-active { display:block; }
+    .tab-hint { color:var(--muted); font-size:13px; margin:0 0 16px; }
+    .table-tabs { display:flex; flex-wrap:wrap; gap:7px; margin:18px 0 14px; }
+    .table-tab { appearance:none; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--muted); cursor:pointer; font:700 12px/1.2 inherit; min-height:40px; padding:9px 11px; }
+    .table-tab:hover { border-color:var(--blue); color:var(--blue); }
+    .table-tab[aria-selected="true"] { background:var(--blue); border-color:var(--blue); color:#fff; }
+    #full-schema-table tr[hidden] { display:none; }
+    .subtable-tabs { display:flex; flex-wrap:wrap; gap:7px; margin:18px 0 14px; }
+    .subtable-tab { appearance:none; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--muted); cursor:pointer; font:700 12px/1.2 inherit; min-height:40px; padding:9px 11px; }
+    .subtable-tab:hover { border-color:var(--blue); color:var(--blue); }
+    .subtable-tab[aria-selected="true"] { background:var(--blue); border-color:var(--blue); color:#fff; }
+    .schema-subtable tr[hidden] { display:none; }
+    table { width:100%; min-width:920px; border-collapse:collapse; }
+    th, td { padding:11px 13px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:oklch(0.945 0.012 145); color:var(--ink); font-size:11px; letter-spacing:.05em; text-transform:uppercase; white-space:nowrap; }
+    tr:last-child td { border-bottom:0; }
+    td:first-child { font-weight:700; white-space:nowrap; }
+    code { background:#eef2f7; border-radius:4px; padding:1px 5px; font-size:.92em; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .pk { color:#075985; background:var(--blue-soft); }
+    .fk { color:#166534; background:var(--green-soft); }
+    .derived { color:#854d0e; background:var(--gold-soft); }
+    .exclude { color:#991b1b; background:var(--red-soft); }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:18px 0; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:17px; }
+    .card.blue { border-top:4px solid var(--blue); }
+    .card.green { border-top:4px solid var(--green); }
+    .card.gold { border-top:4px solid var(--gold); }
+    .card p { margin:0; font-size:13px; }
+    pre { overflow:auto; background:#172a46; color:#f3f7fc; border:1px solid #29466b; border-radius:12px; padding:18px; font-size:12px; line-height:1.45; }
+    pre code { background:transparent; color:inherit; padding:0; }
+    footer { border-top:1px solid var(--line); margin-top:46px; padding-top:16px; color:var(--muted); font-size:12px; }
+    @media (max-width:760px) { main { padding:28px 14px 48px; } h1 { font-size:34px; } .grid { grid-template-columns:1fr; } .tab-button, .table-tab, .subtable-tab { min-height:44px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration:0.01ms !important; scroll-behavior:auto !important; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">EMS sample data · database design</div>
+    <h1>EMS Unified Database Schema</h1>
+    <p class="lede">A table-first schema for unifying weather, inverter/converter, site-energy, meter, and generation-report exports.</p>
+    <div class="callout"><strong>Common contract:</strong> every curated measurement should resolve to <code>site_id</code>, optional <code>asset_id</code>/<code>channel_id</code>, <code>event_time</code>, <code>metric_code</code>, numeric or text value, unit, quality status, and source-file lineage.</div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Schema sections">
+    <button class="tab-button" id="tab-full" role="tab" aria-selected="true" aria-controls="panel-full" data-tab="panel-full">Full schema</button>
+    <button class="tab-button" id="tab-erd" role="tab" aria-selected="false" aria-controls="panel-erd" data-tab="panel-erd">ERD graph</button>
+    <button class="tab-button" id="tab-core" role="tab" aria-selected="false" aria-controls="panel-core" data-tab="panel-core">Core tables</button>
+    <button class="tab-button" id="tab-measurements" role="tab" aria-selected="false" aria-controls="panel-measurements" data-tab="panel-measurements">Measurement tables</button>
+    <button class="tab-button" id="tab-exclusions" role="tab" aria-selected="false" aria-controls="panel-exclusions" data-tab="panel-exclusions">Modeling decisions</button>
+    <button class="tab-button" id="tab-retrieval" role="tab" aria-selected="false" aria-controls="panel-retrieval" data-tab="panel-retrieval">Retrieval & calculations</button>
+    <button class="tab-button" id="tab-indexes" role="tab" aria-selected="false" aria-controls="panel-indexes" data-tab="panel-indexes">Keys & indexes</button>
+    <button class="tab-button" id="tab-ddl" role="tab" aria-selected="false" aria-controls="panel-ddl" data-tab="panel-ddl">PostgreSQL DDL</button>
+  </nav>
+  <p class="tab-hint">Select a section to view its schema details. The page keeps one section open at a time for easier review.</p>
+
+  <section class="tab-panel" id="panel-full" role="tabpanel" aria-labelledby="tab-full" hidden>
+  <h2>Full bilingual SQL schema</h2>
+  <p>This is the complete proposed relational schema in one view. English identifiers are used for SQL; Traditional Chinese labels preserve the source/business meaning for users and analysts.</p>
+  <div class="table-tabs" role="tablist" aria-label="Database tables">
+    <button class="table-tab" role="tab" aria-selected="true" data-schema-table="sites">sites · 電站主檔</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="assets">assets · 設備主檔</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="asset_channels">asset_channels · 設備通道</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="source_files">source_files · 來源檔案</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="column_dictionary">column_dictionary · 欄位字典</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="canonical_observations">canonical_observations · 統一觀測</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="weather_readings">weather_readings · 氣象</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="inverter_readings">inverter_readings · 逆變器</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="site_energy_readings">site_energy_readings · 電站能源</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="generation_reports">generation_reports · 發電報表</button>
+    <button class="table-tab" role="tab" aria-selected="false" data-schema-table="metric_dictionary">metric_dictionary · 指標字典</button>
+  </div>
+  <div class="table-wrap">
+    <table id="full-schema-table">
+      <thead><tr><th>Table / 資料表</th><th>Column / 欄位</th><th>Traditional Chinese label / 中文標籤</th><th>PostgreSQL type / 型別</th><th>Key / 關聯</th><th>Meaning / 說明</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="9"><strong>sites</strong><br>電站主檔</td><td><strong>site_id</strong></td><td>電站內部識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Canonical site identifier / 統一電站識別碼。</td></tr>
+        <tr><td>site_code</td><td>電站代碼、案場編號</td><td>TEXT</td><td>UNIQUE</td><td>Normalized from 電站代碼 / 案場編號.</td></tr>
+        <tr><td>site_name</td><td>電站名稱、案場名稱</td><td>TEXT</td><td>NOT NULL</td><td>Canonical display name / 統一顯示名稱。</td></tr>
+        <tr><td>location_name</td><td>地點、子案場名稱</td><td>TEXT</td><td>NULL</td><td>Nested site scope / 巢狀案場或地點。</td></tr>
+        <tr><td>timezone</td><td>時區</td><td>TEXT</td><td>NOT NULL</td><td>Default Asia/Taipei / 預設台北時區。</td></tr>
+        <tr><td>capacity_kwp</td><td>裝置容量(kWp)</td><td>NUMERIC(12,3)</td><td>NULL</td><td>Effective-dated reference capacity / 有效期間參考容量。</td></tr>
+        <tr><td>active_from</td><td>啟用日期</td><td>DATE</td><td>NULL</td><td>Site lifecycle start / 案場啟用日。</td></tr>
+        <tr><td>active_to</td><td>停用日期</td><td>DATE</td><td>NULL</td><td>Site lifecycle end / 案場停用日。</td></tr>
+        <tr><td>metadata</td><td>其他案場資訊</td><td>JSONB</td><td>NULL</td><td>Low-frequency attributes / 低頻案場屬性。</td></tr>
+
+        <tr><td rowspan="8"><strong>assets</strong><br>設備主檔</td><td><strong>asset_id</strong></td><td>設備識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Canonical device identifier / 統一設備識別碼。</td></tr>
+        <tr><td>site_id</td><td>所屬電站識別碼</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Owning site / 所屬案場。</td></tr>
+        <tr><td>asset_type</td><td>設備類型</td><td>TEXT</td><td>NOT NULL</td><td>inverter, converter, meter, weather_device / 逆變器、變流器、電表、氣象設備。</td></tr>
+        <tr><td>asset_name</td><td>設備名稱</td><td>TEXT</td><td>NOT NULL</td><td>Normalized from 裝置名稱 / 由裝置名稱標準化。</td></tr>
+        <tr><td>vendor</td><td>設備廠牌</td><td>TEXT</td><td>NULL</td><td>Device registry attribute / 設備主檔屬性。</td></tr>
+        <tr><td>model</td><td>設備型號</td><td>TEXT</td><td>NULL</td><td>Device registry attribute / 設備主檔屬性。</td></tr>
+        <tr><td>rated_capacity_kwp</td><td>設備額定容量(kWp)</td><td>NUMERIC(12,3)</td><td>NULL</td><td>Asset capacity / 設備容量。</td></tr>
+        <tr><td>active_from / active_to</td><td>設備啟用 / 停用日期</td><td>DATE</td><td>NULL</td><td>Device lifecycle / 設備生命週期。</td></tr>
+
+        <tr><td rowspan="5"><strong>asset_channels</strong><br>設備通道主檔</td><td><strong>channel_id</strong></td><td>通道識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Variable DC/PV/phase channel / 可變直流、PV、相別通道。</td></tr>
+        <tr><td>asset_id</td><td>設備識別碼</td><td>BIGINT</td><td><span class="badge fk">FK assets</span></td><td>Owning device / 所屬設備。</td></tr>
+        <tr><td>channel_code</td><td>通道代碼</td><td>TEXT</td><td>NOT NULL</td><td>DC-1, PV4, phase-A, etc. / 通道標籤。</td></tr>
+        <tr><td>channel_type</td><td>通道類型</td><td>TEXT</td><td>NOT NULL</td><td>string, phase, MPPT, etc. / 組串、相別、MPPT。</td></tr>
+        <tr><td>active_from</td><td>通道啟用日期</td><td>DATE</td><td>NULL</td><td>Channel lifecycle / 通道生命週期。</td></tr>
+
+        <tr><td rowspan="8"><strong>source_files</strong><br>來源檔案</td><td><strong>source_file_id</strong></td><td>來源檔案識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Import lineage / 匯入追蹤。</td></tr>
+        <tr><td>relative_path</td><td>相對檔案路徑</td><td>TEXT</td><td>UNIQUE</td><td>Original CSV path / 原始 CSV 路徑。</td></tr>
+        <tr><td>site_id</td><td>電站識別碼</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Folder-derived site / 由資料夾解析案場。</td></tr>
+        <tr><td>datatype</td><td>資料類型</td><td>TEXT</td><td>NOT NULL</td><td>氣象、逆變器、發電報表等。</td></tr>
+        <tr><td>file_hash</td><td>檔案雜湊</td><td>TEXT</td><td>UNIQUE</td><td>Idempotent ingestion / 防止重複匯入。</td></tr>
+        <tr><td>row_count</td><td>資料列數</td><td>BIGINT</td><td>NULL</td><td>File-level aggregate / 檔案層級統計。</td></tr>
+        <tr><td>discovered_at / loaded_at</td><td>發現 / 載入時間</td><td>TIMESTAMPTZ</td><td>NOT NULL / NULL</td><td>Ingestion lifecycle / 匯入生命週期。</td></tr>
+        <tr><td>parser_version</td><td>解析器版本</td><td>TEXT</td><td>NULL</td><td>Replay and reproducibility / 重跑與可追溯性。</td></tr>
+
+        <tr><td rowspan="8"><strong>column_dictionary</strong><br>欄位字典</td><td><strong>column_definition_id</strong></td><td>欄位定義識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Source-column contract / 來源欄位契約。</td></tr>
+        <tr><td>datatype</td><td>資料類型</td><td>TEXT</td><td>NOT NULL</td><td>Source folder type / 來源資料夾類型。</td></tr>
+        <tr><td>source_column</td><td>來源欄位名稱</td><td>TEXT</td><td>NOT NULL</td><td>Original header preserved / 保留原始欄名。</td></tr>
+        <tr><td>canonical_name</td><td>統一欄位名稱</td><td>TEXT</td><td>NULL</td><td>Normalized metric / 標準化指標名稱。</td></tr>
+        <tr><td>semantic_role</td><td>語意角色</td><td>TEXT</td><td>NOT NULL</td><td>identity, timestamp, measurement, status, derived / 身分、時間、量測、狀態、衍生。</td></tr>
+        <tr><td>unit_code</td><td>單位代碼</td><td>TEXT</td><td>NULL</td><td>kW, kWh, V, A, °C, W/m², etc.</td></tr>
+        <tr><td>pandas_dtype</td><td>來源資料型別</td><td>TEXT</td><td>NULL</td><td>Observed input dtype / 觀察到的輸入型別。</td></tr>
+        <tr><td>status</td><td>欄位狀態</td><td>TEXT</td><td>NOT NULL</td><td>proposed, approved, deprecated, quarantined / 提案、核准、淘汰、隔離。</td></tr>
+
+        <tr><td rowspan="12"><strong>canonical_observations</strong><br>統一觀測事實表</td><td><strong>observation_id</strong></td><td>觀測識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>One canonical observation / 一筆統一觀測資料。</td></tr>
+        <tr><td>site_id</td><td>電站識別碼</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Required site identity / 必填案場身分。</td></tr>
+        <tr><td>asset_id</td><td>設備識別碼</td><td>BIGINT</td><td><span class="badge fk">FK assets</span></td><td>Nullable for site-level metrics / 案場層級可為空。</td></tr>
+        <tr><td>channel_id</td><td>通道識別碼</td><td>BIGINT</td><td><span class="badge fk">FK asset_channels</span></td><td>For DC/PV/phase channels / 用於直流、PV、相別。</td></tr>
+        <tr><td>event_time</td><td>事件時間</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Normalized 日期/時間 / 統一時間欄位。</td></tr>
+        <tr><td>metric_code</td><td>指標代碼</td><td>TEXT</td><td><span class="badge fk">FK metric_dictionary</span></td><td>Controlled metric vocabulary / 受控指標詞彙。</td></tr>
+        <tr><td>value_numeric</td><td>數值</td><td>NUMERIC</td><td>NULL</td><td>Numeric measurement / 數值型量測。</td></tr>
+        <tr><td>value_text</td><td>文字值</td><td>TEXT</td><td>NULL</td><td>Status/weather text / 狀態或天氣文字。</td></tr>
+        <tr><td>unit_code</td><td>單位代碼</td><td>TEXT</td><td>NULL</td><td>Measurement unit / 量測單位。</td></tr>
+        <tr><td>quality_code</td><td>品質代碼</td><td>TEXT</td><td>NULL</td><td>valid, missing, duplicate, outlier / 有效、缺失、重複、異常。</td></tr>
+        <tr><td>source_file_id</td><td>來源檔案識別碼</td><td>BIGINT</td><td><span class="badge fk">FK source_files</span></td><td>Required lineage / 必填來源追蹤。</td></tr>
+        <tr><td>ingested_at</td><td>匯入時間</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Load timestamp / 載入時間。</td></tr>
+
+        <tr><td rowspan="7"><strong>weather_readings</strong><br>氣象觀測表</td><td><strong>weather_reading_id</strong></td><td>氣象觀測識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Typed weather view/fact / 氣象型別化事實。</td></tr>
+        <tr><td>site_id / asset_id</td><td>電站 / 設備識別碼</td><td>BIGINT</td><td>FK</td><td>Site/device context / 案場與設備脈絡。</td></tr>
+        <tr><td>event_time</td><td>事件時間</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Observation timestamp / 觀測時間。</td></tr>
+        <tr><td>temperature_c</td><td>溫度(°C)</td><td>NUMERIC</td><td>NULL</td><td>溫度、溫度(°C)。</td></tr>
+        <tr><td>module_temperature_c</td><td>模組溫度(°C)</td><td>NUMERIC</td><td>NULL</td><td>模組溫度。</td></tr>
+        <tr><td>irradiance_w_m2</td><td>輻照度(W/m²)</td><td>NUMERIC</td><td>NULL</td><td>輻照度、日照量 after unit confirmation / 確認單位後統一。</td></tr>
+        <tr><td>source_file_id</td><td>來源檔案識別碼</td><td>BIGINT</td><td>FK</td><td>Lineage / 來源追蹤。</td></tr>
+
+        <tr><td rowspan="8"><strong>inverter_readings</strong><br>逆變器觀測表</td><td><strong>inverter_reading_id</strong></td><td>逆變器觀測識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Typed inverter/converter fact / 逆變器與變流器型別化事實。</td></tr>
+        <tr><td>site_id / asset_id</td><td>電站 / 設備識別碼</td><td>BIGINT</td><td>FK</td><td>Site/device context / 案場與設備脈絡。</td></tr>
+        <tr><td>event_time</td><td>事件時間</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Observation timestamp / 觀測時間。</td></tr>
+        <tr><td>ac_power_kw / dc_power_kw</td><td>交流 / 直流功率(kW)</td><td>NUMERIC</td><td>NULL</td><td>Power metrics / 功率指標。</td></tr>
+        <tr><td>voltage_v / current_a</td><td>電壓(V) / 電流(A)</td><td>NUMERIC</td><td>NULL</td><td>Aggregate electrical values / 彙總電氣量。</td></tr>
+        <tr><td>power_factor</td><td>功率因數(PF)</td><td>NUMERIC</td><td>NULL</td><td>Confirm ratio scale / 確認比例尺度。</td></tr>
+        <tr><td>efficiency_pct</td><td>轉換效率(%)</td><td>NUMERIC</td><td>NULL</td><td>直交流轉換效率。</td></tr>
+        <tr><td>metric_json / source_file_id</td><td>延伸指標 / 來源檔案</td><td>JSONB / BIGINT</td><td>FK</td><td>Rare metrics and lineage / 少見指標與來源追蹤。</td></tr>
+
+        <tr><td rowspan="7"><strong>site_energy_readings</strong><br>電站能源觀測表</td><td><strong>site_energy_reading_id</strong></td><td>電站能源觀測識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Site-level power and energy / 案場層級電力能源。</td></tr>
+        <tr><td>site_id / event_time</td><td>電站識別碼 / 事件時間</td><td>BIGINT / TIMESTAMPTZ</td><td>FK / required</td><td>Site time-series grain / 案場時間序列粒度。</td></tr>
+        <tr><td>ac_power_kw / dc_power_kw</td><td>交流 / 直流功率(kW)</td><td>NUMERIC</td><td>NULL</td><td>Instantaneous power / 瞬時功率。</td></tr>
+        <tr><td>energy_kwh</td><td>發電量(kWh)</td><td>NUMERIC</td><td>NULL</td><td>Interval/daily energy / 區間或每日能源。</td></tr>
+        <tr><td>cumulative_energy_kwh</td><td>累積發電量(kWh)</td><td>NUMERIC</td><td>NULL</td><td>Counter; never sum directly / 計數器，不可直接加總。</td></tr>
+        <tr><td>irradiance_w_m2</td><td>輻照度(W/m²)</td><td>NUMERIC</td><td>NULL</td><td>Optional site context / 案場脈絡。</td></tr>
+        <tr><td>source_file_id</td><td>來源檔案識別碼</td><td>BIGINT</td><td>FK</td><td>Lineage / 來源追蹤。</td></tr>
+
+        <tr><td rowspan="7"><strong>generation_reports</strong><br>發電報表</td><td><strong>generation_report_id</strong></td><td>發電報表識別碼</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Daily/report-level facts / 每日或報表粒度。</td></tr>
+        <tr><td>site_id / report_date</td><td>電站識別碼 / 報表日期</td><td>BIGINT / DATE</td><td>FK / required</td><td>Unique site/report date / 每案場每日一筆。</td></tr>
+        <tr><td>expected_energy_kwh</td><td>預期發電量(kWh)</td><td>NUMERIC</td><td>NULL</td><td>預期發電量。</td></tr>
+        <tr><td>actual_energy_kwh</td><td>實際發電量(kWh)</td><td>NUMERIC</td><td>NULL</td><td>實際發電量。</td></tr>
+        <tr><td>today_energy_kwh</td><td>今日發電量(kWh)</td><td>NUMERIC</td><td>NULL</td><td>Report metric / 報表指標。</td></tr>
+        <tr><td>performance_ratio_pct</td><td>性能比(PR %)</td><td>NUMERIC</td><td>NULL</td><td>Derived/reporting metric / 衍生報表指標。</td></tr>
+        <tr><td>co2_reduction_kg / source_file_id</td><td>減碳量 / 來源檔案</td><td>NUMERIC / BIGINT</td><td>FK</td><td>Policy-dependent metric and lineage / 政策依賴指標與來源追蹤。</td></tr>
+
+        <tr><td rowspan="4"><strong>metric_dictionary</strong><br>指標字典</td><td><strong>metric_code</strong></td><td>指標代碼</td><td>TEXT</td><td><span class="badge pk">PK</span></td><td>Canonical metric vocabulary / 統一指標詞彙。</td></tr>
+        <tr><td>metric_name_zh</td><td>指標中文名稱</td><td>TEXT</td><td>NOT NULL</td><td>Traditional Chinese label / 繁體中文名稱。</td></tr>
+        <tr><td>metric_name_en</td><td>指標英文名稱</td><td>TEXT</td><td>NOT NULL</td><td>English SQL/API label / 英文資料庫與 API 名稱。</td></tr>
+        <tr><td>unit_code / aggregation_rule</td><td>單位 / 聚合規則</td><td>TEXT</td><td>NOT NULL</td><td>kW, kWh, V, A and sum/avg/last/max / 單位與加總規則。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="callout"><strong>Modeling note / 建模說明:</strong> The source CSV headers remain traceable through <code>column_dictionary</code>. The bilingual names above are the proposed stable SQL/API contract, not a claim that every source file contains every field.</p>
+  </section>
+
+  <section class="tab-panel" id="panel-erd" role="tabpanel" aria-labelledby="tab-erd" hidden>
+  <h2>Entity relationship diagram</h2>
+  <p>This view follows the ERD style in your reference: each table is a card with key columns, and lines show foreign-key relationships.</p>
+  <div class="erd" aria-label="EMS entity relationship diagram">
+    <svg viewBox="0 0 1400 930" role="img" aria-labelledby="erd-title erd-desc">
+      <title id="erd-title">EMS entity relationship diagram</title>
+      <desc id="erd-desc">Tables are shown as database cards. Sites connect to assets and observations. Source files and dictionaries connect to canonical observations. Canonical observations connect to typed domain tables.</desc>
+      <defs>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#94a3b8" flood-opacity=".35"></feDropShadow></filter>
+        <marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path></marker>
+      </defs>
+
+      <!-- relationship lines behind the table cards -->
+      <path class="rel" d="M275 155 H330 V305 H380"></path><text class="rel-label" x="292" y="145">1 : N</text>
+      <path class="rel" d="M275 155 H310 V475 H380"></path><text class="rel-label" x="292" y="460">1 : N</text>
+      <path class="rel" d="M275 155 C470 155 520 260 610 330"></path><text class="rel-label" x="430" y="177">1 : N</text>
+      <path class="rel" d="M275 475 H330 V355 H380"></path><text class="rel-label" x="294" y="420">maps</text>
+      <path class="rel" d="M275 755 H330 V390 H380"></path><text class="rel-label" x="292" y="735">lineage</text>
+      <path class="rel" d="M650 210 V260 H680"></path><text class="rel-label" x="665" y="247">channels</text>
+      <path class="rel" d="M650 570 V520 H680"></path><text class="rel-label" x="665" y="550">metrics</text>
+      <path class="rel" d="M940 345 H1000 V115 H1040"></path><text class="rel-label" x="960" y="330">view</text>
+      <path class="rel" d="M940 365 H1020 V320 H1040"></path><text class="rel-label" x="958" y="380">view</text>
+      <path class="rel" d="M940 390 H1000 V530 H1040"></path><text class="rel-label" x="956" y="450">view</text>
+      <path class="rel" d="M940 410 H980 V740 H1040"></path><text class="rel-label" x="950" y="600">view</text>
+
+      <!-- table cards -->
+      <g>
+        <rect class="tbl" x="35" y="70" width="240" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head" x="35" y="70" width="240" height="38" rx="8"></rect><text class="tbl-title" x="50" y="95">sites</text>
+        <text class="tbl-key" x="50" y="130">🔑 site_id</text><text class="tbl-type" x="168" y="130">BIGSERIAL</text><line class="tbl-divider" x1="45" y1="140" x2="265" y2="140"></line><text class="tbl-col" x="50" y="160">site_code</text><text class="tbl-type" x="168" y="160">TEXT UNIQUE</text><text class="tbl-col" x="50" y="183">site_name</text><text class="tbl-type" x="168" y="183">TEXT</text><text class="tbl-col" x="50" y="206">capacity_kwp</text><text class="tbl-type" x="168" y="206">NUMERIC</text><text class="tbl-col" x="50" y="229">timezone</text><text class="tbl-type" x="168" y="229">TEXT</text>
+      </g>
+      <g>
+        <rect class="tbl" x="35" y="390" width="240" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head" x="35" y="390" width="240" height="38" rx="8"></rect><text class="tbl-title" x="50" y="415">assets</text>
+        <text class="tbl-key" x="50" y="450">🔑 asset_id</text><text class="tbl-type" x="168" y="450">BIGSERIAL</text><line class="tbl-divider" x1="45" y1="460" x2="265" y2="460"></line><text class="tbl-col" x="50" y="480">site_id</text><text class="tbl-type" x="168" y="480">BIGINT FK</text><text class="tbl-col" x="50" y="503">asset_type</text><text class="tbl-type" x="168" y="503">TEXT</text><text class="tbl-col" x="50" y="526">asset_name</text><text class="tbl-type" x="168" y="526">TEXT</text><text class="tbl-col" x="50" y="549">rated_capacity_kwp</text><text class="tbl-type" x="168" y="549">NUMERIC</text>
+      </g>
+      <g>
+        <rect class="tbl" x="35" y="670" width="240" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head lineage" x="35" y="670" width="240" height="38" rx="8"></rect><text class="tbl-title" x="50" y="695">source_files</text>
+        <text class="tbl-key" x="50" y="730">🔑 source_file_id</text><text class="tbl-type" x="168" y="730">BIGSERIAL</text><line class="tbl-divider" x1="45" y1="740" x2="265" y2="740"></line><text class="tbl-col" x="50" y="760">relative_path</text><text class="tbl-type" x="168" y="760">TEXT UNIQUE</text><text class="tbl-col" x="50" y="783">site_id</text><text class="tbl-type" x="168" y="783">BIGINT FK</text><text class="tbl-col" x="50" y="806">datatype</text><text class="tbl-type" x="168" y="806">TEXT</text><text class="tbl-col" x="50" y="829">file_hash</text><text class="tbl-type" x="168" y="829">TEXT UNIQUE</text>
+      </g>
+      <g>
+        <rect class="tbl" x="380" y="350" width="270" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head lineage" x="380" y="350" width="270" height="38" rx="8"></rect><text class="tbl-title" x="395" y="375">column_dictionary</text>
+        <text class="tbl-key" x="395" y="410">🔑 column_definition_id</text><text class="tbl-type" x="555" y="410">BIGSERIAL</text><line class="tbl-divider" x1="390" y1="420" x2="640" y2="420"></line><text class="tbl-col" x="395" y="440">source_column</text><text class="tbl-type" x="555" y="440">TEXT</text><text class="tbl-col" x="395" y="463">canonical_name</text><text class="tbl-type" x="555" y="463">TEXT</text><text class="tbl-col" x="395" y="486">semantic_role</text><text class="tbl-type" x="555" y="486">TEXT</text><text class="tbl-col" x="395" y="509">unit_code</text><text class="tbl-type" x="555" y="509">TEXT</text>
+      </g>
+      <g>
+        <rect class="tbl" x="515" y="70" width="270" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head core" x="515" y="70" width="270" height="38" rx="8"></rect><text class="tbl-title" x="530" y="95">asset_channels</text>
+        <text class="tbl-key" x="530" y="130">🔑 channel_id</text><text class="tbl-type" x="690" y="130">BIGSERIAL</text><line class="tbl-divider" x1="525" y1="140" x2="775" y2="140"></line><text class="tbl-col" x="530" y="160">asset_id</text><text class="tbl-type" x="690" y="160">BIGINT FK</text><text class="tbl-col" x="530" y="183">channel_code</text><text class="tbl-type" x="690" y="183">TEXT</text><text class="tbl-col" x="530" y="206">channel_type</text><text class="tbl-type" x="690" y="206">TEXT</text><text class="tbl-col" x="530" y="229">active_from</text><text class="tbl-type" x="690" y="229">DATE</text>
+      </g>
+      <g>
+        <rect class="tbl" x="680" y="300" width="260" height="230" rx="8" fill="#fff"></rect><rect class="tbl-head core" x="680" y="300" width="260" height="38" rx="8"></rect><text class="tbl-title" x="695" y="325">canonical_observations</text>
+        <text class="tbl-key" x="695" y="365">🔑 observation_id</text><text class="tbl-type" x="840" y="365">BIGSERIAL</text><line class="tbl-divider" x1="690" y1="375" x2="930" y2="375"></line><text class="tbl-col" x="695" y="398">site_id</text><text class="tbl-type" x="840" y="398">BIGINT FK</text><text class="tbl-col" x="695" y="421">asset_id?</text><text class="tbl-type" x="840" y="421">BIGINT FK</text><text class="tbl-col" x="695" y="444">channel_id?</text><text class="tbl-type" x="840" y="444">BIGINT FK</text><text class="tbl-col" x="695" y="467">event_time</text><text class="tbl-type" x="840" y="467">TIMESTAMPTZ</text><text class="tbl-col" x="695" y="490">metric_code</text><text class="tbl-type" x="840" y="490">TEXT</text><text class="tbl-col" x="695" y="513">value + unit</text><text class="tbl-type" x="840" y="513">NUMERIC/TEXT</text>
+      </g>
+      <g>
+        <rect class="tbl" x="1040" y="55" width="300" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head fact" x="1040" y="55" width="300" height="38" rx="8"></rect><text class="tbl-title" x="1055" y="80">weather_readings</text>
+        <text class="tbl-key" x="1055" y="115">🔑 weather_reading_id</text><text class="tbl-type" x="1220" y="115">BIGSERIAL</text><line class="tbl-divider" x1="1050" y1="125" x2="1330" y2="125"></line><text class="tbl-col" x="1055" y="148">site_id · event_time</text><text class="tbl-type" x="1220" y="148">FK/TIME</text><text class="tbl-col" x="1055" y="171">temperature_c</text><text class="tbl-type" x="1220" y="171">NUMERIC</text><text class="tbl-col" x="1055" y="194">irradiance_w_m2</text><text class="tbl-type" x="1220" y="194">NUMERIC</text><text class="tbl-col" x="1055" y="217">source_file_id</text><text class="tbl-type" x="1220" y="217">BIGINT FK</text>
+      </g>
+      <g>
+        <rect class="tbl" x="1040" y="275" width="300" height="190" rx="8" fill="#fff"></rect><rect class="tbl-head fact" x="1040" y="275" width="300" height="38" rx="8"></rect><text class="tbl-title" x="1055" y="300">inverter_readings</text>
+        <text class="tbl-key" x="1055" y="335">🔑 inverter_reading_id</text><text class="tbl-type" x="1220" y="335">BIGSERIAL</text><line class="tbl-divider" x1="1050" y1="345" x2="1330" y2="345"></line><text class="tbl-col" x="1055" y="368">asset_id · event_time</text><text class="tbl-type" x="1220" y="368">FK/TIME</text><text class="tbl-col" x="1055" y="391">ac_power_kw</text><text class="tbl-type" x="1220" y="391">NUMERIC</text><text class="tbl-col" x="1055" y="414">dc_power_kw</text><text class="tbl-type" x="1220" y="414">NUMERIC</text><text class="tbl-col" x="1055" y="437">voltage_v · current_a</text><text class="tbl-type" x="1220" y="437">NUMERIC</text><text class="tbl-col" x="1055" y="460">metric_json</text><text class="tbl-type" x="1220" y="460">JSONB</text>
+      </g>
+      <g>
+        <rect class="tbl" x="1040" y="510" width="300" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head fact" x="1040" y="510" width="300" height="38" rx="8"></rect><text class="tbl-title" x="1055" y="535">site_energy_readings</text>
+        <text class="tbl-key" x="1055" y="570">🔑 site_energy_reading_id</text><text class="tbl-type" x="1245" y="570">BIGSERIAL</text><line class="tbl-divider" x1="1050" y1="580" x2="1330" y2="580"></line><text class="tbl-col" x="1055" y="603">site_id · event_time</text><text class="tbl-type" x="1220" y="603">FK/TIME</text><text class="tbl-col" x="1055" y="626">ac_power_kw · dc_power_kw</text><text class="tbl-type" x="1220" y="626">NUMERIC</text><text class="tbl-col" x="1055" y="649">energy_kwh</text><text class="tbl-type" x="1220" y="649">NUMERIC</text><text class="tbl-col" x="1055" y="672">cumulative_energy_kwh</text><text class="tbl-type" x="1220" y="672">NUMERIC</text>
+      </g>
+      <g>
+        <rect class="tbl" x="680" y="650" width="260" height="170" rx="8" fill="#fff"></rect><rect class="tbl-head fact" x="680" y="650" width="260" height="38" rx="8"></rect><text class="tbl-title" x="695" y="675">generation_reports</text>
+        <text class="tbl-key" x="695" y="715">🔑 generation_report_id</text><text class="tbl-type" x="845" y="715">BIGSERIAL</text><line class="tbl-divider" x1="690" y1="725" x2="930" y2="725"></line><text class="tbl-col" x="695" y="748">site_id · report_date</text><text class="tbl-type" x="845" y="748">FK/DATE</text><text class="tbl-col" x="695" y="771">expected · actual_kwh</text><text class="tbl-type" x="845" y="771">NUMERIC</text><text class="tbl-col" x="695" y="794">performance_ratio_pct</text><text class="tbl-type" x="845" y="794">NUMERIC</text><text class="tbl-col" x="695" y="817">source_file_id</text><text class="tbl-type" x="845" y="817">BIGINT FK</text>
+      </g>
+    </svg>
+  </div>
+  </section>
+
+  <section class="tab-panel" id="panel-core" role="tabpanel" aria-labelledby="tab-core" hidden>
+  <h2>1. Core database tables</h2>
+  <div class="subtable-tabs" role="tablist" aria-label="Core database tables">
+    <button class="subtable-tab" role="tab" aria-selected="true" data-subtable-group="core" data-subtable="sites">sites · 電站主檔</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="core" data-subtable="assets">assets · 設備主檔</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="core" data-subtable="source_files">source_files · 來源檔案</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="core" data-subtable="column_dictionary">column_dictionary · 欄位字典</button>
+  </div>
+  <div class="table-wrap">
+    <table class="schema-subtable" id="core-schema-table">
+      <thead><tr><th>Table</th><th>Column</th><th>PostgreSQL type</th><th>Key</th><th>Source / purpose</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="9">sites</td><td>site_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Canonical internal site identifier.</td></tr>
+        <tr><td>site_code</td><td>TEXT</td><td>UNIQUE</td><td>Normalized from 電站代碼 / 案場編號.</td></tr>
+        <tr><td>site_name</td><td>TEXT</td><td>NOT NULL</td><td>Canonical site name; source names remain in staging.</td></tr>
+        <tr><td>location_name</td><td>TEXT</td><td>NULL</td><td>Site or sub-site name, including nested scopes.</td></tr>
+        <tr><td>timezone</td><td>TEXT</td><td>NOT NULL</td><td>Default Asia/Taipei; confirm per site.</td></tr>
+        <tr><td>capacity_kwp</td><td>NUMERIC(12,3)</td><td>NULL</td><td>Reference capacity, not a repeated fact-column.</td></tr>
+        <tr><td>active_from</td><td>DATE</td><td>NULL</td><td>Effective-dated site registry.</td></tr>
+        <tr><td>active_to</td><td>DATE</td><td>NULL</td><td>Effective-dated site registry.</td></tr>
+        <tr><td>metadata</td><td>JSONB</td><td>NULL</td><td>Low-frequency site attributes.</td></tr>
+
+        <tr><td rowspan="8">assets</td><td>asset_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Canonical device identifier.</td></tr>
+        <tr><td>site_id</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Owning site.</td></tr>
+        <tr><td>asset_type</td><td>TEXT</td><td>NOT NULL</td><td>inverter, converter, meter, weather_device, etc.</td></tr>
+        <tr><td>asset_name</td><td>TEXT</td><td>NOT NULL</td><td>Normalized from 裝置名稱 and device labels.</td></tr>
+        <tr><td>vendor</td><td>TEXT</td><td>NULL</td><td>Device registry attribute.</td></tr>
+        <tr><td>model</td><td>TEXT</td><td>NULL</td><td>Device registry attribute.</td></tr>
+        <tr><td>rated_capacity_kwp</td><td>NUMERIC(12,3)</td><td>NULL</td><td>Asset capacity with effective dates.</td></tr>
+        <tr><td>active_from / active_to</td><td>DATE</td><td>NULL</td><td>Device lifecycle.</td></tr>
+
+        <tr><td rowspan="8">source_files</td><td>source_file_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Lineage identifier for every imported CSV.</td></tr>
+        <tr><td>relative_path</td><td>TEXT</td><td>UNIQUE</td><td>Original relative file path.</td></tr>
+        <tr><td>site_id</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Folder-derived site mapping.</td></tr>
+        <tr><td>datatype</td><td>TEXT</td><td>NOT NULL</td><td>氣象, 逆變器, 發電報表, etc.</td></tr>
+        <tr><td>file_hash</td><td>TEXT</td><td>UNIQUE</td><td>Idempotent ingestion.</td></tr>
+        <tr><td>row_count</td><td>BIGINT</td><td>NULL</td><td>Aggregate file metadata.</td></tr>
+        <tr><td>discovered_at / loaded_at</td><td>TIMESTAMPTZ</td><td>NOT NULL / NULL</td><td>Ingestion lifecycle.</td></tr>
+        <tr><td>parser_version</td><td>TEXT</td><td>NULL</td><td>Reproducibility and replay.</td></tr>
+
+        <tr><td rowspan="8">column_dictionary</td><td>column_definition_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Source-column contract identifier.</td></tr>
+        <tr><td>datatype</td><td>TEXT</td><td>NOT NULL</td><td>Source folder datatype.</td></tr>
+        <tr><td>source_column</td><td>TEXT</td><td>NOT NULL</td><td>Original header, preserved exactly.</td></tr>
+        <tr><td>canonical_name</td><td>TEXT</td><td>NULL</td><td>Normalized metric name.</td></tr>
+        <tr><td>semantic_role</td><td>TEXT</td><td>NOT NULL</td><td>identity, timestamp, measurement, status, derived.</td></tr>
+        <tr><td>unit_code</td><td>TEXT</td><td>NULL</td><td>Canonical unit such as kW, kWh, V, A, °C.</td></tr>
+        <tr><td>pandas_dtype</td><td>TEXT</td><td>NULL</td><td>Observed input dtype; not the final DB type.</td></tr>
+        <tr><td>status</td><td>TEXT</td><td>NOT NULL</td><td>proposed, approved, deprecated, quarantined.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </section>
+
+  <section class="tab-panel" id="panel-measurements" role="tabpanel" aria-labelledby="tab-measurements" hidden>
+  <h2>2. Measurement and reporting tables</h2>
+  <div class="subtable-tabs" role="tablist" aria-label="Measurement and reporting tables">
+    <button class="subtable-tab" role="tab" aria-selected="true" data-subtable-group="measurements" data-subtable="canonical_observations">canonical_observations · 統一觀測</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="measurements" data-subtable="weather_readings">weather_readings · 氣象</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="measurements" data-subtable="inverter_readings">inverter_readings · 逆變器</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="measurements" data-subtable="site_energy_readings">site_energy_readings · 電站能源</button>
+    <button class="subtable-tab" role="tab" aria-selected="false" data-subtable-group="measurements" data-subtable="generation_reports">generation_reports · 發電報表</button>
+  </div>
+  <div class="table-wrap">
+    <table class="schema-subtable" id="measurement-schema-table">
+      <thead><tr><th>Table</th><th>Column</th><th>PostgreSQL type</th><th>Key</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="12">canonical_observations</td><td>observation_id</td><td>BIGSERIAL / UUID</td><td><span class="badge pk">PK</span></td><td>Unified observation identifier.</td></tr>
+        <tr><td>site_id</td><td>BIGINT</td><td><span class="badge fk">FK sites</span></td><td>Required for every curated observation.</td></tr>
+        <tr><td>asset_id</td><td>BIGINT</td><td><span class="badge fk">FK assets</span></td><td>Required for inverter/converter/device telemetry; nullable for site-level data.</td></tr>
+        <tr><td>channel_id</td><td>BIGINT</td><td>FK asset_channels</td><td>For DC-1..10, PV4..PV8, phase, or string measurements.</td></tr>
+        <tr><td>event_time</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Normalized from 日期/日期時間 + 時間.</td></tr>
+        <tr><td>metric_code</td><td>TEXT</td><td>NOT NULL</td><td>Controlled vocabulary from column_dictionary.</td></tr>
+        <tr><td>value_numeric</td><td>NUMERIC</td><td>NULL</td><td>Numeric measurement.</td></tr>
+        <tr><td>value_text</td><td>TEXT</td><td>NULL</td><td>Status/weather labels only.</td></tr>
+        <tr><td>unit_code</td><td>TEXT</td><td>NULL</td><td>Required for numeric measurements.</td></tr>
+        <tr><td>quality_code</td><td>TEXT</td><td>NULL</td><td>valid, missing, duplicate, outlier, quarantined.</td></tr>
+        <tr><td>source_file_id</td><td>BIGINT</td><td><span class="badge fk">FK source_files</span></td><td>Required lineage.</td></tr>
+        <tr><td>ingested_at</td><td>TIMESTAMPTZ</td><td>NOT NULL</td><td>Load timestamp.</td></tr>
+
+        <tr><td rowspan="8">weather_readings</td><td>weather_reading_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Typed convenience table or view over canonical observations.</td></tr>
+        <tr><td>site_id / asset_id / event_time</td><td>BIGINT / BIGINT / TIMESTAMPTZ</td><td>FK / FK / required</td><td>One site/device observation per timestamp.</td></tr>
+        <tr><td>temperature_c</td><td>NUMERIC</td><td>NULL</td><td>溫度 / 溫度(°C).</td></tr>
+        <tr><td>module_temperature_c</td><td>NUMERIC</td><td>NULL</td><td>模組溫度.</td></tr>
+        <tr><td>irradiance_w_m2</td><td>NUMERIC</td><td>NULL</td><td>輻照度(W/m²) / 日照量 after unit confirmation.</td></tr>
+        <tr><td>weather_code</td><td>TEXT</td><td>NULL</td><td>Controlled status vocabulary.</td></tr>
+        <tr><td>source_file_id</td><td>BIGINT</td><td>FK</td><td>Lineage.</td></tr>
+        <tr><td>quality_code</td><td>TEXT</td><td>NULL</td><td>Quality status.</td></tr>
+
+        <tr><td rowspan="9">inverter_readings</td><td>inverter_reading_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Typed convenience table or view.</td></tr>
+        <tr><td>site_id / asset_id / event_time</td><td>BIGINT / BIGINT / TIMESTAMPTZ</td><td>FK / FK / required</td><td>One inverter/converter per timestamp.</td></tr>
+        <tr><td>ac_power_kw / dc_power_kw</td><td>NUMERIC</td><td>NULL</td><td>AC/DC power metrics.</td></tr>
+        <tr><td>voltage_v / current_a</td><td>NUMERIC</td><td>NULL</td><td>Aggregate electrical values.</td></tr>
+        <tr><td>power_factor</td><td>NUMERIC</td><td>NULL</td><td>PF; confirm ratio scale.</td></tr>
+        <tr><td>efficiency_pct</td><td>NUMERIC</td><td>NULL</td><td>直交流轉換效率(%).</td></tr>
+        <tr><td>metric_json</td><td>JSONB</td><td>NULL</td><td>Temporary edge for rare or unmapped channels.</td></tr>
+        <tr><td>source_file_id</td><td>BIGINT</td><td>FK</td><td>Lineage.</td></tr>
+        <tr><td>quality_code</td><td>TEXT</td><td>NULL</td><td>Quality status.</td></tr>
+
+        <tr><td rowspan="8">site_energy_readings</td><td>site_energy_reading_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Site-level power and energy grain.</td></tr>
+        <tr><td>site_id / event_time</td><td>BIGINT / TIMESTAMPTZ</td><td>FK / required</td><td>One site observation per timestamp.</td></tr>
+        <tr><td>ac_power_kw / dc_power_kw</td><td>NUMERIC</td><td>NULL</td><td>Instantaneous power.</td></tr>
+        <tr><td>energy_kwh</td><td>NUMERIC</td><td>NULL</td><td>Interval/daily energy; never mix with cumulative counters.</td></tr>
+        <tr><td>cumulative_energy_kwh</td><td>NUMERIC</td><td>NULL</td><td>Counter value; do not sum directly.</td></tr>
+        <tr><td>irradiance_w_m2</td><td>NUMERIC</td><td>NULL</td><td>Optional site context.</td></tr>
+        <tr><td>curtailment_pct</td><td>NUMERIC</td><td>NULL</td><td>電力控制比率(%), if confirmed.</td></tr>
+        <tr><td>source_file_id / quality_code</td><td>BIGINT / TEXT</td><td>FK / NULL</td><td>Lineage and quality.</td></tr>
+
+        <tr><td rowspan="8">generation_reports</td><td>generation_report_id</td><td>BIGSERIAL</td><td><span class="badge pk">PK</span></td><td>Daily/report-level facts.</td></tr>
+        <tr><td>site_id / report_date</td><td>BIGINT / DATE</td><td>FK / required</td><td>Unique per site/report date.</td></tr>
+        <tr><td>expected_energy_kwh</td><td>NUMERIC</td><td>NULL</td><td>預期發電量.</td></tr>
+        <tr><td>actual_energy_kwh</td><td>NUMERIC</td><td>NULL</td><td>實際發電量.</td></tr>
+        <tr><td>today_energy_kwh</td><td>NUMERIC</td><td>NULL</td><td>今日發電量; report metric.</td></tr>
+        <tr><td>performance_ratio_pct</td><td>NUMERIC</td><td>NULL</td><td>PR(%); derived/reporting metric.</td></tr>
+        <tr><td>co2_reduction_kg</td><td>NUMERIC</td><td>NULL</td><td>CO2減碳量; policy-dependent.</td></tr>
+        <tr><td>source_file_id</td><td>BIGINT</td><td>FK</td><td>Lineage.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </section>
+
+  <section class="tab-panel" id="panel-exclusions" role="tabpanel" aria-labelledby="tab-exclusions" hidden>
+  <h2>3. Columns not stored directly in the common fact table</h2>
+  <p class="callout"><strong>Important:</strong> “Not in the common fact table” does not mean “delete.” These fields remain available in staging, dimensions, typed domain tables, derived reporting tables, or the column dictionary. The goal is to avoid duplicating identity, mixing incompatible grains, or creating a sparse wide table.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Column family</th><th>Where it belongs</th><th>Why not in the common fact table</th></tr></thead>
+      <tbody>
+        <tr><td>日期, 日期時間, 時間</td><td><span class="badge derived">staging → event_time</span></td><td>Use one normalized timestamp to prevent duplicate or ambiguous time keys.</td></tr>
+        <tr><td>電站名稱, 案場, 案場名稱, 裝置名稱</td><td><span class="badge fk">sites / assets</span></td><td>Identity attributes should be foreign keys, not repeated in every measurement row.</td></tr>
+        <tr><td>裝置容量(kWp)</td><td><span class="badge fk">sites / assets</span></td><td>Reference data with effective dates.</td></tr>
+        <tr><td>今日發電量, 總累積發電量, 變流器歷史總發電量</td><td><span class="badge derived">separate energy semantics</span></td><td>Interval, daily, and cumulative values cannot share one aggregation rule.</td></tr>
+        <tr><td>PR(%), 達成率, CO2減碳量, 電力控制比率(%)</td><td><span class="badge derived">reporting / derived facts</span></td><td>Calculated or policy-dependent metrics should not define the base telemetry contract.</td></tr>
+        <tr><td>直流功率1..10, 直流電壓1..10, PV4..PV8</td><td><span class="badge fk">asset_channels + metric_code</span></td><td>Variable channel counts would create sparse, unstable schemas.</td></tr>
+        <tr><td>狀態, 天氣</td><td><span class="badge derived">controlled dimensions</span></td><td>Text categories need vocabulary governance, not numeric fact columns.</td></tr>
+        <tr><td>Unmapped or duplicated labels</td><td><span class="badge exclude">quarantine</span></td><td>Require confirmed unit, grain, and semantic mapping before promotion.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </section>
+
+  <section class="tab-panel" id="panel-retrieval" role="tabpanel" aria-labelledby="tab-retrieval" hidden>
+  <h2>How to retrieve data and manage calculated fields</h2>
+  <p>The database should have separate layers. Users normally query the typed tables or serving views; engineers can query the canonical observation layer when they need a metric that has not yet received a typed view.</p>
+
+  <div class="grid">
+    <section class="card blue"><h3>1. Raw / staging</h3><p>Keep the original file shape, header names, file hash, parser version, and rejected rows. This layer is for replay and audit—not dashboard queries.</p></section>
+    <section class="card green"><h3>2. Canonical facts</h3><p>Use <code>canonical_observations</code> for the stable contract: site, optional asset/channel, event time, metric, value, unit, quality, and lineage.</p></section>
+    <section class="card gold"><h3>3. Serving layer</h3><p>Expose typed tables and reporting views such as <code>inverter_readings</code>, daily generation, and performance summaries for APIs, dashboards, and MCP tools.</p></section>
+    <section class="card purple"><h3>4. Persisted calculations</h3><p>Store expensive or frequently requested results in <code>derived_metric_values</code> and materialized views. Recalculate affected windows after ingestion and return freshness.</p></section>
+  </div>
+
+  <h3>What is stored versus calculated?</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Metric class</th><th>Examples</th><th>Where to keep it</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Raw measurement / 原始量測</td><td>AC/DC power, voltage, current, temperature, irradiance, interval energy</td><td><code>canonical_observations</code> plus typed serving tables</td><td>Observed values should remain reproducible and traceable to a source file.</td></tr>
+        <tr><td>Reference data / 參考資料</td><td>Site name, device name, capacity, timezone</td><td><code>sites</code>, <code>assets</code>, <code>asset_channels</code></td><td>Identity and configuration are reused across many measurements.</td></tr>
+        <tr><td>Derived metric / 衍生指標</td><td>PR, achievement rate, efficiency, CO₂ reduction, curtailment ratio</td><td><code>metric_dictionary</code> + approved view/materialized view; persist in <code>derived_metric_values</code> when expensive, frequent, audited, or report-critical</td><td>Formula, unit, dependencies, freshness, and version must be explicit. Never execute arbitrary model-supplied SQL.</td></tr>
+        <tr><td>Report snapshot / 報表快照</td><td>Daily report, expected vs actual generation, monthly KPI</td><td><code>generation_reports</code> or a dated materialized view</td><td>Reports may need a reproducible “as calculated at” snapshot.</td></tr>
+        <tr><td>Quality result / 品質結果</td><td>Missing, duplicate, gap, outlier, unit error</td><td><code>quality_events</code> and <code>quality_code</code> on facts</td><td>Quality findings should be queryable without changing the original measurement.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Recommended calculated-field metadata</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Table</th><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="8"><strong>metric_dictionary</strong><br>指標字典</td><td><strong>metric_code</strong></td><td>TEXT PK</td><td>Stable identifier such as <code>performance_ratio_pct</code>.</td></tr>
+        <tr><td>metric_name_en / metric_name_zh</td><td>TEXT</td><td>English API name and Traditional Chinese display label.</td></tr>
+        <tr><td>metric_class</td><td>TEXT</td><td><code>raw</code>, <code>derived</code>, <code>reporting</code>, or <code>quality</code>.</td></tr>
+        <tr><td>unit_code</td><td>TEXT</td><td>Canonical unit: kW, kWh, %, V, A, °C, W/m².</td></tr>
+        <tr><td>aggregation_rule</td><td>TEXT</td><td><code>sum</code>, <code>avg</code>, <code>last</code>, <code>max</code>, or <code>not_aggregatable</code>.</td></tr>
+        <tr><td>formula_sql</td><td>TEXT</td><td>Versioned calculation expression for derived metrics.</td></tr>
+        <tr><td>dependencies</td><td>JSONB</td><td>Input metric codes and required filters/grain.</td></tr>
+        <tr><td>formula_version / effective_from</td><td>TEXT / DATE</td><td>Reproducibility when a business formula changes.</td></tr>
+        <tr><td><strong>derived_metric_values</strong><br>衍生指標結果</td><td>metric_value_id, site_id, asset_id, period_start, period_end, metric_code, value_numeric, unit_code, quality_state, formula_version, calculated_at, source_window_hash</td><td>Fact table</td><td>Fast retrieval for frequent/expensive/report-critical metrics; preserve freshness, quality, formula, and input-window lineage.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Retrieval examples</h3>
+  <p>These examples illustrate the intended API/query pattern. Replace the parameters with the requested site and time range.</p>
+  <pre><code>-- A. Query a typed inverter time series
+SELECT event_time, ac_power_kw, dc_power_kw, voltage_v, current_a
+FROM inverter_readings
+WHERE site_id = :site_id
+  AND asset_id = :asset_id
+  AND event_time &gt;= :from_time
+  AND event_time &lt;  :to_time
+ORDER BY event_time;
+
+-- B. Query a metric that only exists in the canonical layer
+SELECT o.event_time, o.value_numeric, o.unit_code, o.quality_code
+FROM canonical_observations AS o
+JOIN metric_dictionary AS m ON m.metric_code = o.metric_code
+WHERE o.site_id = :site_id
+  AND o.metric_code = 'irradiance_w_m2'
+  AND o.event_time &gt;= :from_time
+  AND o.event_time &lt;  :to_time
+ORDER BY o.event_time;
+
+-- C. Calculate a daily energy summary from interval energy
+SELECT site_id,
+       date_trunc('day', event_time) AS day,
+       SUM(value_numeric) AS energy_kwh
+FROM canonical_observations
+WHERE metric_code = 'energy_kwh'
+  AND site_id = :site_id
+  AND event_time &gt;= :from_time
+  AND event_time &lt;  :to_time
+GROUP BY site_id, date_trunc('day', event_time)
+ORDER BY day;
+
+-- D. Retrieve a calculated metric through a serving view
+SELECT site_id, period_start, period_end, value_numeric, formula_version
+FROM derived_metric_values
+WHERE metric_code = 'performance_ratio_pct'
+  AND site_id = :site_id
+ORDER BY period_start;</code></pre>
+
+  <div class="callout"><strong>Practical rule:</strong> store raw measurements once, define calculated metrics once, and expose them through stable views or materialized views. Persist calculated results only when you need audit snapshots, fast repeated retrieval, or a formula that is expensive to recompute.</div>
+
+  <h3>LLM/MCP retrieval contract</h3>
+  <p>The LLM never queries PostgreSQL directly. FastAPI remains the authority and FastMCP exposes named, read-only tools backed by typed repositories and serving views.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>MCP tool</th><th>Purpose</th><th>Source</th><th>Controls</th></tr></thead>
+      <tbody>
+        <tr><td><code>get_site_snapshot</code></td><td>Current site status and summary metrics</td><td>sites + serving views</td><td>Site-scoped, read-only</td></tr>
+        <tr><td><code>list_site_assets</code></td><td>Assets and channels</td><td>assets + asset_channels</td><td>Keyset pagination</td></tr>
+        <tr><td><code>query_energy_timeseries</code></td><td>Bounded energy/inverter data</td><td>typed views</td><td>Time/row/byte limits</td></tr>
+        <tr><td><code>query_weather_observations</code></td><td>Bounded weather data</td><td>weather serving view</td><td>Quality and freshness returned</td></tr>
+        <tr><td><code>get_generation_reports</code></td><td>Fast daily and period KPIs</td><td>derived_metric_values/materialized views</td><td>Formula version and dependencies</td></tr>
+        <tr><td><code>get_data_quality_summary</code></td><td>Coverage, stale, missing, duplicate, and outlier summary</td><td>quality_events + serving views</td><td>Insufficient data is explicit</td></tr>
+        <tr><td><code>get_source_lineage</code></td><td>Source file and column provenance</td><td>source_files + column_dictionary</td><td>Restricted or approval-gated</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout"><strong>Security rule:</strong> the effective site/user/session/run comes from server-side authorization. MCP arguments are assertions only. No arbitrary SQL, table names, joins, URLs, or write tools are exposed to the model.</div>
+  </section>
+
+  <section class="tab-panel" id="panel-indexes" role="tabpanel" aria-labelledby="tab-indexes" hidden>
+  <h2>4. Recommended keys and indexes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Table</th><th>Constraint / index</th><th>Columns</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>sites</td><td>UNIQUE</td><td>site_code</td><td>Stable site lookup and deduplication.</td></tr>
+        <tr><td>assets</td><td>UNIQUE</td><td>site_id, asset_type, asset_name</td><td>Resolve repeated device names within a site.</td></tr>
+        <tr><td>source_files</td><td>UNIQUE</td><td>relative_path, file_hash</td><td>Idempotent ingestion and replay.</td></tr>
+        <tr><td>canonical_observations</td><td>INDEX</td><td>site_id, event_time</td><td>Site time-series queries.</td></tr>
+        <tr><td>canonical_observations</td><td>INDEX</td><td>asset_id, event_time</td><td>Device time-series queries.</td></tr>
+        <tr><td>generation_reports</td><td>UNIQUE</td><td>site_id, report_date</td><td>One report record per site/date.</td></tr>
+        <tr><td>fact tables</td><td>PARTITION</td><td>event_time by month</td><td>Manage large time-series loads and retention.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </section>
+
+  <section class="tab-panel" id="panel-ddl" role="tabpanel" aria-labelledby="tab-ddl" hidden>
+  <h2>5. Minimal PostgreSQL contract</h2>
+  <pre><code>CREATE TABLE canonical_observations (
+  observation_id  BIGSERIAL PRIMARY KEY,
+  site_id         BIGINT NOT NULL REFERENCES sites(site_id),
+  asset_id        BIGINT REFERENCES assets(asset_id),
+  channel_id      BIGINT REFERENCES asset_channels(channel_id),
+  event_time      TIMESTAMPTZ NOT NULL,
+  metric_code     TEXT NOT NULL REFERENCES metric_dictionary(metric_code),
+  value_numeric   NUMERIC,
+  value_text      TEXT,
+  unit_code       TEXT,
+  quality_code    TEXT,
+  source_file_id  BIGINT NOT NULL REFERENCES source_files(source_file_id),
+  ingested_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_observations_site_time
+  ON canonical_observations(site_id, event_time);
+
+CREATE INDEX ix_observations_asset_time
+  ON canonical_observations(asset_id, event_time);</code></pre>
+  </section>
+
+  <footer>Based on the aggregate EMS sample-data inventory: 9 source datatypes and 701 observed column definitions. No raw CSV rows or cell values are included.</footer>
+</main>
+<script>
+  (() => {
+    const tabs = [...document.querySelectorAll('[data-tab]')];
+    const panels = [...document.querySelectorAll('.tab-panel')];
+    function activate(id, updateHash = true) {
+      tabs.forEach((tab) => {
+        const selected = tab.dataset.tab === id;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      panels.forEach((panel) => {
+        const active = panel.id === id;
+        panel.classList.toggle('is-active', active);
+        panel.hidden = !active;
+      });
+      if (updateHash) history.replaceState(null, '', '#' + id.replace('panel-', ''));
+    }
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activate(tab.dataset.tab));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        let next = index;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = tabs.length - 1;
+        tabs[next].focus();
+        activate(tabs[next].dataset.tab);
+      });
+    });
+    const schemaTableButtons = [...document.querySelectorAll('[data-schema-table]')];
+    const schemaRows = [...document.querySelectorAll('#full-schema-table tbody tr')];
+    let currentSchemaTable = null;
+    schemaRows.forEach((row) => {
+      const firstCell = row.querySelector('td:first-child');
+      if (firstCell && firstCell.hasAttribute('rowspan')) {
+        const strong = firstCell.querySelector('strong');
+        currentSchemaTable = strong ? strong.textContent.trim() : firstCell.textContent.trim().split(/\s+/)[0];
+      }
+      row.dataset.schemaTable = currentSchemaTable;
+    });
+    function activateSchemaTable(name) {
+      schemaTableButtons.forEach((button) => button.setAttribute('aria-selected', String(button.dataset.schemaTable === name)));
+      schemaRows.forEach((row) => { row.hidden = row.dataset.schemaTable !== name; });
+    }
+    schemaTableButtons.forEach((button) => button.addEventListener('click', () => activateSchemaTable(button.dataset.schemaTable)));
+    activateSchemaTable('sites');
+    function bindSubtableGroup(group, tableId, defaultTable) {
+      const buttons = [...document.querySelectorAll(`[data-subtable-group="${group}"]`)];
+      const rows = [...document.querySelectorAll(`#${tableId} tbody tr`)];
+      let current = null;
+      rows.forEach((row) => {
+        const firstCell = row.querySelector('td:first-child');
+        if (firstCell && firstCell.hasAttribute('rowspan')) {
+          const strong = firstCell.querySelector('strong');
+          current = strong ? strong.textContent.trim() : firstCell.textContent.trim().split(/\s+/)[0];
+        }
+        row.dataset.subtable = current;
+      });
+      function activate(name) {
+        buttons.forEach((button) => button.setAttribute('aria-selected', String(button.dataset.subtable === name)));
+        rows.forEach((row) => { row.hidden = row.dataset.subtable !== name; });
+      }
+      buttons.forEach((button) => button.addEventListener('click', () => activate(button.dataset.subtable)));
+      activate(defaultTable);
+    }
+    bindSubtableGroup('core', 'core-schema-table', 'sites');
+    bindSubtableGroup('measurements', 'measurement-schema-table', 'canonical_observations');
+    const initial = location.hash ? 'panel-' + location.hash.slice(1) : 'panel-full';
+    activate(panels.some((panel) => panel.id === initial) ? initial : 'panel-full', false);
+  })();
+</script>
+</body>
+</html>
