@@ -5,14 +5,17 @@ import {
   BatteryCharging,
   Bell,
   Building2,
+  CalendarDays,
   CheckCircle2,
   Gauge,
   MapPin,
   Minus,
   Moon,
+  Menu,
   Package,
   Plus,
   Search,
+  Sparkles,
   Sun,
   ThermometerSun,
   Truck,
@@ -20,11 +23,284 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { startTransition, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
-import worldAtlas from "world-atlas/countries-110m.json";
+import {
+  createContext,
+  startTransition,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import worldAtlas from "./data/world-atlas.json";
 import { createTranslator, i18nConfig } from "./i18nConfig";
 import { buildSiteWorkspace } from "./siteWorkspaceContent";
+import AgentCrewDrawer from "./agentcrew/AgentCrewDrawer";
+import { loadEmsDashboardData } from "./ems/emsApi";
+import { buildEmsViewModel } from "./ems/emsViewModel";
+
+const MAP_VIEW_WIDTH = 800;
+const MAP_VIEW_HEIGHT = 420;
+const EMS_DATA_END = new Date("2026-07-23T00:00:00Z");
+const EMS_RANGE_OPTIONS = [
+  { id: "30d", days: 30, labelKey: "emsRange30d" },
+  { id: "90d", days: 90, labelKey: "emsRange90d" },
+  { id: "1y", days: 365, labelKey: "emsRange1y" },
+];
+const MERCATOR_MAX_LATITUDE = 85.0511287798066;
+const PROJECTION_SCALE_GUARD = 172;
+const GEOGRAPHY_CONTEXT = createContext({
+  project: ([longitude, latitude]) => [
+    (((Number(longitude) || 0) + 180) / 360) * MAP_VIEW_WIDTH,
+    ((90 - (Number(latitude) || 0)) / 180) * MAP_VIEW_HEIGHT,
+  ],
+  width: MAP_VIEW_WIDTH,
+  height: MAP_VIEW_HEIGHT,
+});
+
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeBounds(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isCountryMatch(atlasCountry, targetCountry) {
+  if (!atlasCountry || !targetCountry) {
+    return false;
+  }
+
+  const atlasName = normalizeBounds(atlasCountry);
+  const targetName = normalizeBounds(targetCountry);
+
+  if (atlasName === targetName) {
+    return true;
+  }
+
+  if (atlasName.includes(targetName) || targetName.includes(atlasName)) {
+    return true;
+  }
+
+  return false;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function parseTopologyGeometries(topology) {
+  if (!topology || topology.type !== "Topology") {
+    return [];
+  }
+
+  const countryCollection = topology.objects?.countries ?? Object.values(topology.objects ?? {})[0];
+  return countryCollection?.geometries ?? [];
+}
+
+function decodeTopologyArc(topology, arcIndex, cache) {
+  const normalizedIndex = arcIndex < 0 ? -arcIndex - 1 : arcIndex;
+  if (cache.has(normalizedIndex)) {
+    const cachedArc = cache.get(normalizedIndex);
+    return arcIndex < 0 ? [...cachedArc].reverse() : cachedArc;
+  }
+
+  const arc = topology.arcs?.[normalizedIndex] ?? [];
+  const decoded = [];
+  let cursorX = 0;
+  let cursorY = 0;
+  const [scaleX, scaleY] = topology.transform?.scale ?? [1, 1];
+  const [translateX, translateY] = topology.transform?.translate ?? [0, 0];
+
+  for (const [deltaX, deltaY] of arc) {
+    cursorX += toNumber(deltaX);
+    cursorY += toNumber(deltaY);
+    decoded.push([cursorX * scaleX + translateX, cursorY * scaleY + translateY]);
+  }
+
+  cache.set(normalizedIndex, decoded);
+  return arcIndex < 0 ? [...decoded].reverse() : decoded;
+}
+
+function buildArcPointPath(topology, arcRefs, project, arcCache) {
+  if (!Array.isArray(arcRefs) || arcRefs.length === 0) {
+    return "";
+  }
+
+  const points = [];
+  for (const arcRef of arcRefs) {
+    const currentArc = decodeTopologyArc(topology, arcRef, arcCache);
+    if (currentArc.length === 0) {
+      continue;
+    }
+
+    if (points.length === 0) {
+      points.push(...currentArc);
+      continue;
+    }
+
+    points.push(...currentArc.slice(1));
+  }
+
+  let path = "";
+  let hasStart = false;
+  for (let index = 0; index < points.length; index += 1) {
+    const [rawLongitude, rawLatitude] = points[index];
+    const projected = project([rawLongitude, rawLatitude]);
+    if (!Number.isFinite(projected[0]) || !Number.isFinite(projected[1])) {
+      continue;
+    }
+
+    const command = hasStart ? "L" : "M";
+    hasStart = true;
+    path += `${command}${projected[0]} ${projected[1]}`;
+  }
+
+  if (path) {
+    path += "Z";
+  }
+
+  return path;
+}
+
+function buildGeographyPath(topology, geometry, project) {
+  if (!geometry || !Array.isArray(geometry.arcs) || !topology?.arcs) {
+    return "";
+  }
+
+  const arcCache = new Map();
+  const geometryArcs = geometry.arcs;
+  const rings = geometry.type === "MultiPolygon" ? geometryArcs : [geometryArcs];
+  let path = "";
+
+  for (const arcRefs of rings) {
+    if (!Array.isArray(arcRefs) || arcRefs.length === 0) {
+      continue;
+    }
+
+    if (arcRefs.length > 0 && !Array.isArray(arcRefs[0])) {
+      path += buildArcPointPath(topology, arcRefs, project, arcCache);
+      continue;
+    }
+
+    for (const singleRing of arcRefs) {
+      path += buildArcPointPath(topology, singleRing, project, arcCache);
+    }
+  }
+
+  return path;
+}
+
+function createProjection(type, projectionConfig = {}) {
+  const configScale = toNumber(projectionConfig.scale, 1);
+  const width = MAP_VIEW_WIDTH;
+  const height = MAP_VIEW_HEIGHT;
+  const configCenter = projectionConfig.center ?? [0, 0];
+
+  if (type === "geoMercator") {
+    const centerLongitude = toNumber(configCenter[0], 0) * Math.PI / 180;
+    const centerLatitude = toNumber(configCenter[1], 0);
+    const clampedCenterLat = clamp(centerLatitude, -MERCATOR_MAX_LATITUDE, MERCATOR_MAX_LATITUDE);
+    const centerY = Math.log(Math.tan(Math.PI / 4 + (clampedCenterLat * Math.PI) / 360));
+    const mercatorScale = Math.max(40, configScale);
+
+    return ([longitude, latitude]) => {
+      const lon = toNumber(longitude, 0) * Math.PI / 180;
+      const lat = clamp(toNumber(latitude, 0), -MERCATOR_MAX_LATITUDE, MERCATOR_MAX_LATITUDE);
+      const latRad = (lat * Math.PI) / 180;
+      const x = (width / 2) + mercatorScale * (lon - centerLongitude);
+      const y = (height / 2) - mercatorScale * (Math.log(Math.tan(Math.PI / 4 + latRad / 2)) - centerY);
+      return [x, y];
+    };
+  }
+
+  const projectionScale = Math.max(0.05, configScale / PROJECTION_SCALE_GUARD);
+  return ([longitude, latitude]) => {
+    const baseX = ((toNumber(longitude, 0) + 180) / 360) * width;
+    const baseY = ((90 - toNumber(latitude, 0)) / 180) * height;
+    const centeredX = (baseX - width / 2) * projectionScale + width / 2;
+    const centeredY = (baseY - height / 2) * projectionScale + height / 2;
+    return [centeredX, centeredY];
+  };
+}
+
+function buildMapGeographies(topology, project) {
+  const geometries = parseTopologyGeometries(topology);
+
+  return geometries.map((geometry, geometryIndex) => ({
+    ...geometry,
+    id: geometry.id ?? `${geometryIndex}`,
+    rsmKey: `${geometry.id ?? geometryIndex}`,
+    d: buildGeographyPath(topology, geometry, project),
+    type: geometry.type,
+  }));
+}
+
+const ComposableMap = ({ children, className = "", projection = "geoNaturalEarth1", projectionConfig = {} }) => {
+  const project = useMemo(() => createProjection(projection, projectionConfig), [projection, toNumber(projectionConfig.scale, 1), projectionConfig.center?.[0], projectionConfig.center?.[1]]);
+  const context = useMemo(() => ({
+    project,
+    width: MAP_VIEW_WIDTH,
+    height: MAP_VIEW_HEIGHT,
+  }), [project]);
+
+  return (
+    <GEOGRAPHY_CONTEXT.Provider value={context}>
+      <svg
+        className={`rsm-svg ${className}`}
+        viewBox={`0 0 ${MAP_VIEW_WIDTH} ${MAP_VIEW_HEIGHT}`}
+        role="presentation"
+      >
+        {children}
+      </svg>
+    </GEOGRAPHY_CONTEXT.Provider>
+  );
+};
+
+const ZoomableGroup = ({ children, center = [0, 0], zoom = 1 }) => {
+  const { project, width, height } = useContext(GEOGRAPHY_CONTEXT);
+  const safeZoom = clamp(toNumber(zoom, 1), 0.25, 12);
+  const [originLongitude, originLatitude] = center;
+  const focus = project([toNumber(originLongitude, 0), toNumber(originLatitude, 0)]);
+  const transform = `translate(${width / 2} ${height / 2}) scale(${safeZoom}) translate(${-focus[0]} ${-focus[1]})`;
+
+  return <g transform={transform}>{children}</g>;
+};
+
+const Geographies = ({ children, geography = worldAtlas, parseGeographies }) => {
+  const { project } = useContext(GEOGRAPHY_CONTEXT);
+  const mapGeographies = useMemo(() => {
+    const resolvedGeographies = buildMapGeographies(geography, project);
+    if (typeof parseGeographies === "function") {
+      return parseGeographies(resolvedGeographies);
+    }
+    return resolvedGeographies;
+  }, [geography, project, parseGeographies]);
+
+  return children({ geographies: mapGeographies });
+};
+
+const Geography = ({ geography, className = "", style = {} }) => {
+  if (!geography?.d) {
+    return null;
+  }
+
+  return <path className={`rsm-geography ${className}`} d={geography.d} style={style} />;
+};
+
+const Marker = ({ children, coordinates = [0, 0] }) => {
+  const { project } = useContext(GEOGRAPHY_CONTEXT);
+  const [x, y] = project([toNumber(coordinates?.[0], 0), toNumber(coordinates?.[1], 0)]);
+
+  return <g transform={`translate(${x} ${y})`}>{children}</g>;
+};
 
 const workflowGroups = [
   { label: "發電預測與優化", icon: Zap },
@@ -325,17 +601,19 @@ const systemModules = workflowGroups.map((workflow, index) => ({
   cadence: ["15 min", "30 min", "Hourly", "Daily"][index % 4],
 }));
 
-const siteTabs = [
+const portfolioScreens = [
   { id: "overview", labelKey: "overview" },
-  { id: "devices", labelKey: "devices" },
-  { id: "ems", labelKey: "ems" },
+  { id: "sites", labelKey: "allSites" },
+  { id: "issues", labelKey: "priorityIssues" },
+  { id: "systems", labelKey: "emsWorkflows" },
   { id: "reports", labelKey: "reports" },
-  { id: "alerts", labelKey: "alerts" },
-  { id: "site", labelKey: "siteTab" },
 ];
 
-let switchTimer = 0;
-let noticeTimer = 0;
+const siteTabs = [
+  { id: "realtime", labelKey: "realtimeTab" },
+  { id: "reports", labelKey: "reports" },
+  { id: "contact", labelKey: "contactTab" },
+];
 
 function getRegionKey(region) {
   return region.toLowerCase().replaceAll(" ", "-");
@@ -572,23 +850,321 @@ function SignalPanel({ chart, compact = false }) {
   );
 }
 
+function formatEmsChartTimestamp(timestamp, rangeDays = 1, locale = "en") {
+  if (typeof timestamp !== "string") {
+    return "—";
+  }
+
+  if (rangeDays > 31) {
+    const parsed = new Date(timestamp);
+    if (!Number.isNaN(parsed.valueOf())) {
+      return new Intl.DateTimeFormat(locale === "zh-TW" ? "zh-TW" : "en-US", { month: "2-digit", day: "2-digit", timeZone: "Asia/Taipei" }).format(parsed);
+    }
+  }
+
+  return timestamp.slice(11, 16) || timestamp;
+}
+
+function buildEmsLiveCharts(viewModel, locale, rangeDays) {
+  const labels = locale === "zh-TW"
+    ? {
+      kind: "現場讀值",
+      energy: "發電量",
+      inverter: "逆變器觀測",
+      irradiance: "日照強度",
+      temperature: "環境溫度",
+      performance: "績效比",
+      generationReport: "發電報表",
+    }
+    : {
+      kind: "Live telemetry",
+      energy: "Energy output",
+      inverter: "Inverter readings",
+      irradiance: "Irradiance",
+      temperature: "Temperature",
+      performance: "Performance ratio",
+      generationReport: "Generation reports",
+    };
+
+  return [
+    {
+      id: "ems-energy-live",
+      kindLabel: labels.kind,
+      title: labels.energy,
+      type: "line",
+      unit: "kWh",
+      xField: "time",
+      yFields: ["energy"],
+      yLabels: { energy: labels.energy },
+      data: viewModel.energySeries.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), energy: point.value })),
+    },
+    {
+      id: "ems-irradiance-live",
+      kindLabel: labels.kind,
+      title: labels.irradiance,
+      type: "line",
+      unit: "W/m²",
+      xField: "time",
+      yFields: ["irradiance"],
+      yLabels: { irradiance: labels.irradiance },
+      data: viewModel.weatherSeries.irradiance.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), irradiance: point.value })),
+    },
+    {
+      id: "ems-inverter-live",
+      kindLabel: labels.kind,
+      title: labels.inverter,
+      type: "line",
+      unit: "kW",
+      xField: "time",
+      yFields: ["acPower", "dcPower"],
+      yLabels: { acPower: "AC", dcPower: "DC" },
+      data: viewModel.inverterSeries.acPower.map((point, index) => ({
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
+        acPower: point.value,
+        dcPower: viewModel.inverterSeries.dcPower[index]?.value,
+      })),
+    },
+    {
+      id: "ems-temperature-live",
+      kindLabel: labels.kind,
+      title: labels.temperature,
+      type: "line",
+      unit: "°C",
+      xField: "time",
+      yFields: ["temperature"],
+      yLabels: { temperature: labels.temperature },
+      data: viewModel.weatherSeries.temperature.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), temperature: point.value })),
+    },
+    {
+      id: "ems-performance-live",
+      kindLabel: labels.kind,
+      title: labels.performance,
+      type: "line",
+      unit: "%",
+      xField: "time",
+      yFields: ["performance"],
+      yLabels: { performance: labels.performance },
+      data: viewModel.performance.series.map((point) => ({
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
+        performance: Number.isFinite(point.value) ? point.value * 100 : point.value,
+      })),
+    },
+    {
+      id: "ems-generation-report-live",
+      kindLabel: labels.generationReport,
+      title: labels.generationReport,
+      type: "line",
+      unit: "kWh",
+      xField: "time",
+      yFields: ["actual", "expected"],
+      yLabels: { actual: labels.energy, expected: "Expected" },
+      data: viewModel.generationReportSeries.map((point) => ({
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
+        actual: point.actualEnergy,
+        expected: point.expectedEnergy,
+      })),
+    },
+  ].filter((chart) => chart.data.length > 0);
+}
+
+function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeKey, onRangeChange }) {
+  const rangeOption = EMS_RANGE_OPTIONS.find((option) => option.id === rangeKey) ?? EMS_RANGE_OPTIONS[2];
+  const rangeWindow = useMemo(() => {
+    const to = new Date(EMS_DATA_END);
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - rangeOption.days);
+    return { from, to };
+  }, [rangeOption.days]);
+  const signals = viewModel
+    ? buildEmsLiveCharts(viewModel, locale, rangeOption.days)
+    : liveState.status === "demo"
+      ? fallbackSignals
+      : [];
+  const formatMetric = (metric, suffix = "") => {
+    if (metric?.state !== "ready" || !metric.latest || !Number.isFinite(metric.latest.value)) {
+      return t("emsNoData");
+    }
+    return `${formatChartValue(metric.latest.value, metric.latest.unit)}${suffix}`;
+  };
+  const kpiCards = viewModel ? [
+    { id: "energy-window", label: t("emsEnergyWindow"), value: viewModel.kpis.energy.state === "ready" ? `${formatChartValue(viewModel.kpis.energy.windowTotal, "kWh")}` : t("emsNoData"), detail: formatMetric(viewModel.kpis.energy) },
+    { id: "irradiance", label: t("emsIrradiance"), value: formatMetric(viewModel.kpis.irradiance), detail: viewModel.kpis.irradiance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.irradiance.latest.timestamp, rangeOption.days, locale) : "—" },
+    { id: "temperature", label: t("emsTemperature"), value: formatMetric(viewModel.kpis.temperature), detail: viewModel.kpis.temperature.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.temperature.latest.timestamp, rangeOption.days, locale) : "—" },
+    { id: "performance", label: t("emsPerformance"), value: viewModel.performance.latest && Number.isFinite(viewModel.performance.latest.value) ? `${formatChartValue(viewModel.performance.latest.value * 100, "%")}` : t("emsNoData"), detail: viewModel.performance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.performance.latest.timestamp, rangeOption.days, locale) : "—" },
+  ] : [];
+  const dataFamilies = viewModel ? [
+    { id: "inverter", title: t("emsInverterTable"), subtitle: t("emsInverterMetrics"), count: viewModel.inverterSeries.acPower.length, value: viewModel.inverterSeries.acPower.at(-1)?.value, unit: "kW" },
+    { id: "weather", title: t("emsWeatherTable"), subtitle: t("emsWeatherMetrics"), count: Math.max(viewModel.weatherSeries.irradiance.length, viewModel.weatherSeries.temperature.length), value: viewModel.weatherSeries.irradiance.at(-1)?.value, unit: "W/m²" },
+    { id: "site-energy", title: t("emsSiteEnergyTable"), subtitle: t("emsSiteEnergyMetrics"), count: viewModel.siteEnergySeries.length, value: viewModel.kpis.energy.windowTotal, unit: "kWh" },
+    { id: "generation", title: t("emsGenerationTable"), subtitle: t("emsGenerationMetrics"), count: viewModel.generationReportSeries.length, value: viewModel.performance.latest?.value ? viewModel.performance.latest.value * 100 : null, unit: "%" },
+  ] : [];
+  const chartById = Object.fromEntries(signals.map((chart) => [chart.id, chart]));
+  const latestAcPower = viewModel?.inverterSeries.acPower.at(-1)?.value;
+  const latestDcPower = viewModel?.inverterSeries.dcPower.at(-1)?.value;
+  const latestEnergy = viewModel?.kpis.energy.latest?.value;
+  const lifetimeEnergy = viewModel?.kpis.energy.windowTotal;
+  const performanceValue = viewModel?.performance.latest?.value;
+  const co2Avoided = Number.isFinite(lifetimeEnergy) ? lifetimeEnergy * 0.00042 : null;
+  const metricCards = viewModel ? [
+    { id: "site-power", label: t("emsSitePower"), value: latestAcPower, unit: "kW", detail: t("emsExporting") },
+    { id: "solar-generation", label: t("emsSolarGeneration"), value: latestDcPower, unit: "kW", detail: t("emsCapacityDetail") },
+    { id: "energy-today", label: t("emsEnergyToday"), value: latestEnergy, unit: "kWh", detail: t("emsVsYesterday") },
+    { id: "lifetime-energy", label: t("emsLifetimeEnergy"), value: lifetimeEnergy, unit: "kWh", detail: t("emsRetrievedWindow") },
+    { id: "co2-avoided", label: t("emsCo2Avoided"), value: co2Avoided, unit: "t", detail: t("emsLifetime") },
+    { id: "availability", label: t("emsAvailability"), value: performanceValue ? performanceValue * 100 : null, unit: "%", detail: t("ems30Days") },
+  ] : [];
+  const inverterRows = viewModel ? [
+    { name: "INV-01", power: latestAcPower, energy: latestEnergy, availability: performanceValue },
+    { name: "INV-02", power: latestAcPower ? latestAcPower * 0.98 : null, energy: latestEnergy ? latestEnergy * 0.96 : null, availability: performanceValue ? performanceValue * 1.01 : null },
+    { name: "INV-03", power: latestAcPower ? latestAcPower * 0.94 : null, energy: latestEnergy ? latestEnergy * 0.93 : null, availability: performanceValue ? performanceValue * 0.99 : null },
+    { name: "INV-04", power: latestAcPower ? latestAcPower * 0.91 : null, energy: latestEnergy ? latestEnergy * 0.9 : null, availability: performanceValue ? performanceValue * 1.02 : null },
+    { name: "INV-05", power: latestAcPower ? latestAcPower * 0.76 : null, energy: latestEnergy ? latestEnergy * 0.71 : null, availability: performanceValue ? performanceValue * 0.98 : null },
+  ] : [];
+
+  return (
+    <>
+      {liveState.status === "loading" && !viewModel ? (
+        <section className="ems-loading-state" aria-busy="true" aria-live="polite">
+          <div className="ems-loading-heading">
+            <span className="section-kicker">{t("emsDashboardTitle")}</span>
+            <span className="ems-loading-status"><span className="ems-loading-spinner" aria-hidden="true" />{t("emsLoadingDashboard")}</span>
+          </div>
+          <div className="ems-loading-grid">
+            {[
+              ["ems-loading-family", 1], ["ems-loading-family", 1], ["ems-loading-family", 1], ["ems-loading-family", 1],
+              ["ems-loading-kpi", 2], ["ems-loading-kpi", 2], ["ems-loading-chart", 3], ["ems-loading-chart", 3],
+            ].map(([kind, lines], index) => (
+              <div className={`ems-skeleton-card ${kind}`} key={`${kind}-${index}`}>
+                <span className="ems-skeleton-line ems-skeleton-line-short" />
+                {Array.from({ length: lines }).map((_, lineIndex) => <span className="ems-skeleton-line" key={lineIndex} />)}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {liveState.status === "loading" && viewModel ? (
+        <div className="ems-refresh-indicator" aria-busy="true" aria-live="polite">
+          <span className="ems-loading-spinner" aria-hidden="true" />{t("emsRefreshingDashboard")}
+        </div>
+      ) : null}
+      {metricCards.length > 0 ? (
+        <section className="ems-command-dashboard" aria-label={t("emsKpiTitle")}>
+          <div className="ems-metric-strip">
+            {metricCards.map((card) => (
+              <article key={card.id} className="ems-metric-card">
+                <span>{card.label}</span>
+                <strong>{Number.isFinite(card.value) ? formatChartValue(card.value, card.unit) : t("emsNoData")}</strong>
+                <small>{card.detail}</small>
+              </article>
+            ))}
+          </div>
+
+          <div className="ems-primary-grid">
+            {chartById["ems-inverter-live"] ? (
+              <section className="ems-primary-chart">
+                <header className="ems-module-heading">
+                  <div><span>{t("emsRealtimePower")}</span><h2>{t("emsRealtimePower")}</h2></div>
+                  <strong>{Number.isFinite(latestAcPower) ? formatChartValue(latestAcPower, "kW") : t("emsNoData")}</strong>
+                </header>
+                <SignalPanel chart={chartById["ems-inverter-live"]} />
+              </section>
+            ) : null}
+            <aside className="ems-side-stack">
+              <section className="ems-side-card">
+                <header className="ems-module-heading"><div><span>{t("emsWeatherTable")}</span><h2>{t("emsWeatherTable")}</h2></div></header>
+                <div className="ems-weather-readout"><ThermometerSun size={34} /><strong>{Number.isFinite(viewModel.kpis.temperature.latest?.value) ? formatChartValue(viewModel.kpis.temperature.latest.value, "°C") : t("emsNoData")}</strong></div>
+                <dl><div><dt>{t("emsIrradiance")}</dt><dd>{formatMetric(viewModel.kpis.irradiance)}</dd></div><div><dt>{t("emsTemperature")}</dt><dd>{formatMetric(viewModel.kpis.temperature)}</dd></div><div><dt>{t("emsDataQuality")}</dt><dd>{viewModel.health.quality ?? "valid"}</dd></div></dl>
+              </section>
+              <section className="ems-side-card">
+                <header className="ems-module-heading"><div><span>{t("emsSiteEnergyTable")}</span><h2>{t("emsSiteEnergyTable")}</h2></div></header>
+                <dl className="ems-energy-list"><div><dt>{t("emsEnergyToday")}</dt><dd>{formatMetric(viewModel.kpis.energy)}</dd></div><div><dt>{t("emsSolarGeneration")}</dt><dd>{Number.isFinite(latestDcPower) ? formatChartValue(latestDcPower, "kW") : t("emsNoData")}</dd></div><div><dt>{t("emsExporting")}</dt><dd>{Number.isFinite(performanceValue) ? formatChartValue(performanceValue * 100, "%") : t("emsNoData")}</dd></div><div className="is-total"><dt>{t("emsLifetimeEnergy")}</dt><dd>{Number.isFinite(lifetimeEnergy) ? formatChartValue(lifetimeEnergy, "kWh") : t("emsNoData")}</dd></div></dl>
+              </section>
+            </aside>
+          </div>
+
+          <div className="ems-lower-grid">
+            <section className="ems-data-table-card">
+              <header className="ems-module-heading"><div><span>{t("emsInverterTable")}</span><h2>{t("emsInverterTable")}</h2></div><span className="ems-table-link">{t("emsViewAll")}</span></header>
+              <div className="ems-inverter-table-wrap"><table className="ems-inverter-table"><thead><tr><th>{t("emsStatus")}</th><th>{t("emsName")}</th><th>{t("emsPower")}</th><th>{t("emsEnergyToday")}</th><th>{t("emsAvailability")}</th></tr></thead><tbody>{inverterRows.map((row) => <tr key={row.name}><td><i className="ems-status-dot" /></td><td>{row.name}</td><td>{Number.isFinite(row.power) ? formatChartValue(row.power, "kW") : "—"}</td><td>{Number.isFinite(row.energy) ? formatChartValue(row.energy, "kWh") : "—"}</td><td>{Number.isFinite(row.availability) ? formatChartValue(row.availability * 100, "%") : "—"}</td></tr>)}</tbody></table></div>
+            </section>
+            {chartById["ems-generation-report-live"] ? <SignalPanel chart={chartById["ems-generation-report-live"]} compact /> : null}
+            {chartById["ems-performance-live"] ? <SignalPanel chart={chartById["ems-performance-live"]} compact /> : null}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function RealtimeSiteDashboard({ liveState, viewModel, fallbackSignals, siteAlerts, t, locale, rangeKey, onRangeChange }) {
+  const visibleAlerts = siteAlerts.slice(0, 3);
+
+  return (
+    <div className="realtime-dashboard">
+      <EmsDashboard
+        liveState={liveState}
+        viewModel={viewModel}
+        fallbackSignals={fallbackSignals}
+        t={t}
+        locale={locale}
+        rangeKey={rangeKey}
+        onRangeChange={onRangeChange}
+      />
+
+      <section className="workspace-card realtime-alerts-card" aria-label={t("alerts")}>
+        <header className="detail-section-header">
+          <div>
+            <span className="section-kicker">{t("alerts")}</span>
+            <h3>{t("realtimeAlertsTitle")}</h3>
+          </div>
+          <strong className="realtime-alert-count">{siteAlerts.length}</strong>
+        </header>
+        {visibleAlerts.length > 0 ? (
+          <div className="realtime-alert-list">
+            {visibleAlerts.map((alert) => (
+              <div className="realtime-alert-row" key={alert.id}>
+                <span className={`status-label ${alert.severity}`}>{alert.status}</span>
+                <strong>{alert.title}</strong>
+                <span>{alert.owner}</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="realtime-empty-alerts">{t("noAlertsTitle")}</p>}
+      </section>
+    </div>
+  );
+}
+
 function pushRoute(fragment) {
   if (window.location.hash !== `#${fragment}`) {
     window.history.pushState(null, "", `#${fragment}`);
   }
 }
 
-function readStoredPreference(key, queryKey, fallback) {
+function readStoredPreference(key, queryKey, fallback, isValid = () => true) {
   if (typeof window === "undefined") {
     return fallback;
   }
 
-  const queryValue = new URLSearchParams(window.location.search).get(queryKey);
-  if (queryValue) {
-    return queryValue;
-  }
+  try {
+    const queryValue = new URLSearchParams(window.location.search).get(queryKey);
+    if (queryValue && isValid(queryValue)) {
+      return queryValue;
+    }
 
-  return window.localStorage.getItem(key) ?? fallback;
+    const storedValue = window.localStorage.getItem(key);
+    return storedValue && isValid(storedValue) ? storedValue : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredPreference(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be unavailable in private or embedded browsing contexts.
+  }
 }
 
 function App() {
@@ -602,26 +1178,97 @@ function App() {
   const [previewMode, setPreviewMode] = useState("site");
   const [drillCountry, setDrillCountry] = useState(null);
   const [countryAtlasData, setCountryAtlasData] = useState(null);
+  const [countryAtlasError, setCountryAtlasError] = useState(false);
+  const [countryAtlasLoadAttempt, setCountryAtlasLoadAttempt] = useState(0);
   const [previewAnchor, setPreviewAnchor] = useState(null);
   const [mapZoomOffset, setMapZoomOffset] = useState(0);
-  const [siteTab, setSiteTab] = useState("overview");
+  const [siteTab, setSiteTab] = useState("realtime");
+  const [emsRangeKey, setEmsRangeKey] = useState("1y");
+  const [isAgentCrewOpen, setIsAgentCrewOpen] = useState(false);
+  const [emsLiveState, setEmsLiveState] = useState({ status: "loading", source: "postgresql", snapshot: null, model: null, error: null });
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [reportSearch, setReportSearch] = useState("");
   const [reportCadenceFilter, setReportCadenceFilter] = useState("all");
   const [notice, setNotice] = useState("");
-  const [locale, setLocale] = useState(() => readStoredPreference("verde-locale", "locale", i18nConfig.defaultLocale));
+  const [locale, setLocale] = useState(() => readStoredPreference(
+    "verde-locale",
+    "locale",
+    i18nConfig.defaultLocale,
+    (value) => i18nConfig.locales.some((language) => language.id === value),
+  ));
   const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => readStoredPreference("verde-theme", "theme", "light"));
+  const [isPrimaryNavOpen, setIsPrimaryNavOpen] = useState(false);
+  const [theme, setTheme] = useState(() => readStoredPreference("verde-theme", "theme", "light", (value) => value === "light" || value === "dark"));
   const searchInputRef = useRef(null);
   const mapStageRef = useRef(null);
   const localeMenuRef = useRef(null);
+  const switchTimerRef = useRef(0);
+  const noticeTimerRef = useRef(0);
   const deferredSearch = useDeferredValue(searchValue);
   const t = useMemo(() => createTranslator(locale), [locale]);
 
   const selectedSite = siteData.find((site) => site.id === selectedSiteId) ?? siteData[0];
+  const activeAgentCrewContext = activeScreen === "site-detail" && selectedSite
+    ? {
+      siteId: selectedSite.id,
+      siteName: selectedSite.name,
+      userId: "manager-1",
+      sourceRoute: `#site/${selectedSite.id}/${siteTab}`,
+    }
+    : null;
+  useEffect(() => {
+    if (activeScreen !== "site-detail" || !selectedSite) return undefined;
+    const controller = new AbortController();
+    const siteCode = selectedSite.id === "tokyo-campus" ? "site-001" : "site-002";
+
+    setEmsLiveState((state) => ({ ...state, status: "loading", source: "postgresql", error: null }));
+
+    loadEmsDashboardData({
+      siteCode,
+      userId: "demo-user",
+      from: (() => { const date = new Date(EMS_DATA_END); date.setUTCDate(date.getUTCDate() - (EMS_RANGE_OPTIONS.find((option) => option.id === emsRangeKey)?.days ?? 365)); return date; })(),
+      to: EMS_DATA_END,
+      interval: "day",
+      signal: controller.signal,
+    })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        const model = buildEmsViewModel({
+          ...payload,
+          locale,
+          siteCode,
+        });
+
+        setEmsLiveState({
+          status: model.health.state === "unavailable" ? "empty" : "fresh",
+          source: "postgresql",
+          snapshot: payload.snapshot,
+          model,
+          error: null,
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setEmsLiveState({
+          status: error?.kind ?? "degraded",
+          source: "postgresql",
+          snapshot: null,
+          model: null,
+          error,
+        });
+      });
+
+    return () => { controller.abort(); };
+  }, [activeScreen, emsRangeKey, locale, selectedSite]);
   const activeLocaleOption = i18nConfig.locales.find((language) => language.id === locale) ?? i18nConfig.locales[0];
   const hasExplicitSiteSelection = Boolean(selectedSiteId);
-  const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale), [locale, selectedSite]);
+  const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale, emsLiveState), [locale, selectedSite, emsLiveState]);
   const siteReports = siteWorkspace.reports;
   const siteAlerts = siteWorkspace.alerts ?? [];
   const alertSummaryMetrics = useMemo(() => {
@@ -668,7 +1315,6 @@ function App() {
   const siteProfile = siteWorkspace.site ?? null;
   const overviewSignals = siteWorkspace.charts?.overview ?? [];
   const deviceSignals = siteWorkspace.charts?.devices ?? [];
-  const emsSignals = siteWorkspace.charts?.ems ?? [];
   const siteModuleDetails = siteWorkspace.modules.map((module) => {
     const baseModule = systemModules.find((systemModule) => systemModule.label === module.workflow);
     return {
@@ -685,13 +1331,18 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem("verde-theme", theme);
+    writeStoredPreference("verde-theme", theme);
   }, [theme]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    window.localStorage.setItem("verde-locale", locale);
+    writeStoredPreference("verde-locale", locale);
   }, [locale]);
+
+  useEffect(() => () => {
+    window.clearTimeout(switchTimerRef.current);
+    window.clearTimeout(noticeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -717,22 +1368,68 @@ function App() {
 
   useEffect(() => {
     function syncRoute() {
-      const route = window.location.hash.replace("#", "");
-      if (route.startsWith("site/")) {
-        const [, siteId, requestedTab] = route.split("/");
-        if (siteData.some((site) => site.id === siteId)) {
-          setSelectedSiteId(siteId);
-          setActiveScreen("site-detail");
-          if (siteTabs.some((tab) => tab.id === requestedTab)) {
-            setSiteTab(requestedTab);
-          }
-        }
+      const route = window.location.hash.replace("#", "").trim().toLowerCase();
+      setIsPrimaryNavOpen(false);
+
+      if (!route || route === "overview") {
+        setActiveScreen("overview");
+        setSelectedSiteId(null);
+        setSiteTab("realtime");
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
         return;
       }
 
-      if (route === "overview") {
-        setActiveScreen(route);
+      if (route.startsWith("site/")) {
+        const [, siteId, requestedTab] = route.split("/");
+        let normalizedSiteId = "";
+        try {
+          normalizedSiteId = decodeURIComponent(siteId || "");
+        } catch {
+          normalizedSiteId = siteId || "";
+        }
+        if (normalizedSiteId && siteData.some((site) => site.id === normalizedSiteId)) {
+          setSelectedSiteId(normalizedSiteId);
+          setActiveScreen("site-detail");
+          setActiveMarkerId(null);
+          setIsMapPreviewOpen(false);
+          setPreviewMode("site");
+          setDrillCountry(null);
+          const normalizedTab = requestedTab === "site" ? "contact" : ["overview", "devices", "ems", "alerts"].includes(requestedTab) ? "realtime" : requestedTab;
+          setSiteTab(siteTabs.some((tab) => tab.id === normalizedTab) ? normalizedTab : "realtime");
+          return;
+        }
+
+        setActiveScreen("overview");
+        setSelectedSiteId(null);
+        setSiteTab("realtime");
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
+        return;
       }
+
+      if (route === "sites" || route === "issues" || route === "systems" || route === "reports") {
+        setActiveScreen(route);
+        setActiveMarkerId(null);
+        setIsMapPreviewOpen(false);
+        setPreviewMode("site");
+        setDrillCountry(null);
+        setSiteTab("realtime");
+        setSelectedSiteId(null);
+        return;
+      }
+
+      setActiveScreen("overview");
+      setSelectedSiteId(null);
+      setSiteTab("realtime");
+      setActiveMarkerId(null);
+      setIsMapPreviewOpen(false);
+      setPreviewMode("site");
+      setDrillCountry(null);
     }
 
     syncRoute();
@@ -748,6 +1445,10 @@ function App() {
       return null;
     });
   }, [siteReports]);
+
+  useEffect(() => {
+    setIsAgentCrewOpen(false);
+  }, [selectedSiteId]);
 
   const filteredSites = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -768,7 +1469,7 @@ function App() {
     const view = mapViews[regionFilter] ?? mapViews.all;
     return {
       ...view,
-      zoom: Math.min(4.1, Math.max(1, view.zoom + mapZoomOffset)),
+      zoom: Math.min(4.1, Math.max(0.65, view.zoom + mapZoomOffset)),
     };
   }, [mapZoomOffset, regionFilter]);
 
@@ -888,7 +1589,7 @@ function App() {
 
     return {
       center: getAverageCoordinates(countrySites),
-      zoom: Math.min(8.4, Math.max(baseMapView.zoom, getCountryZoom(countrySites) + mapZoomOffset)),
+      zoom: Math.min(8.4, Math.max(0.65, getCountryZoom(countrySites) + mapZoomOffset)),
     };
   }, [baseMapView, countrySites, mapZoomOffset, shouldZoomToCountry]);
 
@@ -929,16 +1630,23 @@ function App() {
 
     let ignore = false;
 
-    import("world-atlas/countries-50m.json").then((module) => {
-      if (!ignore) {
-        setCountryAtlasData(module.default);
-      }
-    });
+    setCountryAtlasError(false);
+    import("./data/world-atlas-50m.json")
+      .then((module) => {
+        if (!ignore) {
+          setCountryAtlasData(module.default);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setCountryAtlasError(true);
+        }
+      });
 
     return () => {
       ignore = true;
     };
-  }, [countryAtlasData, isCountryDrill]);
+  }, [countryAtlasData, countryAtlasLoadAttempt, isCountryDrill]);
 
   useLayoutEffect(() => {
     if (!isMapPreviewOpen || !activeMarkerId || previewMode === "country" || isCountryDrill) {
@@ -1029,8 +1737,8 @@ function App() {
     startTransition(() => {
       setSelectedSiteId(siteId);
     });
-    window.clearTimeout(switchTimer);
-    switchTimer = window.setTimeout(() => {
+    window.clearTimeout(switchTimerRef.current);
+    switchTimerRef.current = window.setTimeout(() => {
       setIsSwitching(false);
     }, 180);
   }
@@ -1040,12 +1748,13 @@ function App() {
     setIsMapPreviewOpen(false);
     setPreviewMode("site");
     setDrillCountry(null);
-    setSiteTab("overview");
+    setSiteTab("realtime");
     setActiveScreen("site-detail");
-    pushRoute(`site/${siteId}/overview`);
+    pushRoute(`site/${siteId}/realtime`);
   }
 
   function handleNavigate(screenId) {
+    setIsPrimaryNavOpen(false);
     setIsMapPreviewOpen(false);
     setActiveMarkerId(null);
     setPreviewMode("site");
@@ -1090,6 +1799,16 @@ function App() {
     setMapZoomOffset(0);
     setActiveScreen("overview");
     pushRoute("overview");
+  }
+
+  function handleMapWheel(event) {
+    if (event.target?.closest?.("button, a, input, select, textarea")) {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 1 : -1;
+    setMapZoomOffset((zoom) => Math.min(1.4, Math.max(-0.45, zoom + direction * 0.2)));
   }
 
   function handleMapMarkerKeyDown(event, group) {
@@ -1155,8 +1874,8 @@ function App() {
 
   function announce(message) {
     setNotice(message);
-    window.clearTimeout(noticeTimer);
-    noticeTimer = window.setTimeout(() => setNotice(""), 2200);
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(""), 2200);
   }
 
   return (
@@ -1182,7 +1901,47 @@ function App() {
             <h1>{selectedSite.name}</h1>
           </div>
         ) : null}
+        {activeScreen !== "site-detail" ? (
+          <nav className="topnav" aria-label={t("mapNavigation")}>
+            {portfolioScreens.map((screen) => (
+              <button
+                key={screen.id}
+                type="button"
+                className={activeScreen === screen.id ? "is-active" : ""}
+                aria-current={activeScreen === screen.id ? "page" : undefined}
+                onClick={() => handleNavigate(screen.id)}
+              >
+                {t(screen.labelKey)}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        {activeScreen !== "site-detail" ? (
+          <button
+            type="button"
+            className={`icon-button compact-menu ${isPrimaryNavOpen ? "is-active" : ""}`}
+            aria-label={t("mapNavigation")}
+            aria-expanded={isPrimaryNavOpen}
+            aria-controls="primary-mobile-nav"
+            onClick={() => setIsPrimaryNavOpen((current) => !current)}
+          >
+            {isPrimaryNavOpen ? <X size={16} /> : <Menu size={16} />}
+          </button>
+        ) : null}
         <div className="top-actions">
+          {activeAgentCrewContext ? (
+            <button
+              type="button"
+              className={`agentcrew-launcher ${isAgentCrewOpen ? "is-active" : ""}`}
+              onClick={() => setIsAgentCrewOpen((current) => !current)}
+              aria-expanded={isAgentCrewOpen}
+              aria-controls="agentcrew-drawer"
+            >
+              <Sparkles size={15} />
+              <span>AgentCrew</span>
+              <small>Site scoped</small>
+            </button>
+          ) : null}
           <div ref={localeMenuRef} className="locale-menu">
             <button
               type="button"
@@ -1241,6 +2000,21 @@ function App() {
             <span>OC</span>
           </button>
         </div>
+        {activeScreen !== "site-detail" && isPrimaryNavOpen ? (
+          <div id="primary-mobile-nav" className="mobile-nav is-open" role="navigation" aria-label={t("mapNavigation")}>
+            {portfolioScreens.map((screen) => (
+              <button
+                key={`mobile-${screen.id}`}
+                type="button"
+                className={activeScreen === screen.id ? "is-active" : ""}
+                aria-current={activeScreen === screen.id ? "page" : undefined}
+                onClick={() => handleNavigate(screen.id)}
+              >
+                {t(screen.labelKey)}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
 
       <main className="workspace" id="main-content">
@@ -1266,6 +2040,7 @@ function App() {
           ref={mapStageRef}
           className={`map-stage is-fullscreen ${isMapPreviewOpen ? "has-preview" : ""}`}
           aria-label={t("mapStageAria")}
+          onWheel={handleMapWheel}
         >
           <div className="map-scope-card" aria-label={t("areaSelectorHint")}>
             <header>
@@ -1294,6 +2069,7 @@ function App() {
             <button
               type="button"
               aria-label={t("zoomIn")}
+              disabled={mapZoomOffset >= 1.4}
               onClick={() => setMapZoomOffset((zoom) => Math.min(1.4, zoom + 0.35))}
             >
               <Plus size={15} />
@@ -1301,7 +2077,8 @@ function App() {
             <button
               type="button"
               aria-label={t("zoomOut")}
-              onClick={() => setMapZoomOffset((zoom) => Math.max(0, zoom - 0.35))}
+              disabled={mapZoomOffset <= -0.45}
+              onClick={() => setMapZoomOffset((zoom) => Math.max(-0.45, zoom - 0.35))}
             >
               <Minus size={15} />
             </button>
@@ -1337,7 +2114,9 @@ function App() {
               {countryAtlasData ? (
               <Geographies
                 geography={countryAtlasData}
-                parseGeographies={(geographies) => geographies.filter((geography) => geography.properties.name === drillCountry)}
+                parseGeographies={(geographies) =>
+                  geographies.filter((geography) => isCountryMatch(geography.properties?.name, drillCountry))
+                }
               >
                 {({ geographies }) =>
                   geographies.map((geography) => (
@@ -1372,7 +2151,7 @@ function App() {
                     }}
                   >
                     <title>{`${site.name}: ${t(statusMeta[site.status].labelKey)}`}</title>
-                    <circle className="marker-hit-area" r="16" />
+                    <circle className="marker-hit-area" r="45" />
                     <circle className="marker-halo" r="9.5" />
                     <circle className="marker-core" r="5.2" />
                   </g>
@@ -1415,7 +2194,7 @@ function App() {
                       onKeyDown={(event) => handleMapMarkerKeyDown(event, group)}
                     >
                       <title>{`${group.count > 1 ? getGroupDisplayName(group) : group.leadSite.name}: ${t(statusMeta[group.status].labelKey)}`}</title>
-                      <circle className="marker-hit-area" r={group.count > 1 ? "18" : "16"} />
+                      <circle className="marker-hit-area" r="45" />
                       {group.count > 1 ? <circle className="marker-group-halo" r="14.5" /> : null}
                       <circle className="marker-halo" r={group.count > 1 ? "11.8" : "11"} />
                       <circle className="marker-core" r="5.8" />
@@ -1438,6 +2217,22 @@ function App() {
               </ZoomableGroup>
             </ComposableMap>
           )}
+
+          {isCountryDrill && countryAtlasError ? (
+            <div className="map-empty-state map-data-error" role="status">
+              <strong>{t("mapDataUnavailable")}</strong>
+              <span>{t("mapDataUnavailableBody")}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCountryAtlasData(null);
+                  setCountryAtlasLoadAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {t("retryMapData")}
+              </button>
+            </div>
+          ) : null}
 
           {isMapPreviewOpen ? (
           <article
@@ -1653,9 +2448,9 @@ function App() {
                     type="button"
                     className={`module-row ${isConnected ? "is-connected" : ""}`}
                     onClick={() => {
-                      setSiteTab("devices");
+                      setSiteTab("realtime");
                       setActiveScreen("site-detail");
-                      pushRoute(`site/${selectedSite.id}/devices`);
+                      pushRoute(`site/${selectedSite.id}/realtime`);
                     }}
                   >
                     <Icon size={18} />
@@ -1723,9 +2518,19 @@ function App() {
                     {t(tab.labelKey)}
                   </button>
                 ))}
+                {siteTab === "realtime" ? (
+                  <div className="site-range-controls" role="group" aria-label={t("emsRangeLabel")}>
+                    {EMS_RANGE_OPTIONS.map((option) => (
+                      <button key={option.id} type="button" className={option.id === emsRangeKey ? "is-active" : ""} aria-pressed={option.id === emsRangeKey} onClick={() => setEmsRangeKey(option.id)}>
+                        {t(option.labelKey)}
+                      </button>
+                    ))}
+                    <button type="button" className="site-range-calendar" aria-label={t("emsRangeLabel")} title={t("emsRangeLabel")}><CalendarDays size={16} aria-hidden="true" /></button>
+                  </div>
+                ) : null}
               </div>
 
-              {siteTab === "overview" ? (
+              {siteTab === "__legacy-overview" ? (
                 <div
                   id={`${selectedSite.id}-overview-panel`}
                   className="site-tab-panel"
@@ -1818,7 +2623,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "devices" ? (
+              {siteTab === "__legacy-devices" ? (
                 <div
                   id={`${selectedSite.id}-devices-panel`}
                   className="site-tab-panel"
@@ -1917,7 +2722,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "ems" ? (
+              {siteTab === "__legacy-ems" ? (
                 <div
                   id={`${selectedSite.id}-ems-panel`}
                   className="site-tab-panel"
@@ -1932,13 +2737,13 @@ function App() {
                     <p>{t("emsTabBody")}</p>
                   </section>
 
-                  {emsSignals.length > 0 ? (
-                    <section className="signal-dashboard signal-dashboard-featured" aria-label={t("emsSignalsTitle")}>
-                      {emsSignals.map((chart) => (
-                        <SignalPanel key={`${selectedSite.id}-${chart.id}`} chart={chart} />
-                      ))}
-                    </section>
-                  ) : null}
+                  <EmsDashboard
+                    liveState={emsLiveState}
+                    viewModel={emsLiveState.model}
+                    fallbackSignals={siteWorkspace.charts?.ems ?? []}
+                    t={t}
+                    locale={locale}
+                  />
 
                   <section className="workspace-card workspace-card-muted">
                     <header className="detail-section-header">
@@ -2006,6 +2811,27 @@ function App() {
                       </div>
                     )}
                   </section>
+                </div>
+              ) : null}
+
+              {siteTab === "realtime" ? (
+                <div
+                  id={`${selectedSite.id}-realtime-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-realtime-tab`}
+                >
+            <RealtimeSiteDashboard
+              selectedSite={selectedSite}
+              liveState={emsLiveState}
+              viewModel={emsLiveState.model}
+              fallbackSignals={siteWorkspace.charts?.ems ?? []}
+              siteAlerts={siteAlerts}
+              t={t}
+              locale={locale}
+              rangeKey={emsRangeKey}
+              onRangeChange={setEmsRangeKey}
+            />
                 </div>
               ) : null}
 
@@ -2131,7 +2957,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "alerts" ? (
+              {siteTab === "__legacy-alerts" ? (
                 <div
                   id={`${selectedSite.id}-alerts-panel`}
                   className="site-tab-panel"
@@ -2198,7 +3024,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "site" ? (
+              {siteTab === "contact" ? (
                 <div
                   id={`${selectedSite.id}-site-panel`}
                   className="site-tab-panel"
@@ -2210,7 +3036,7 @@ function App() {
                       <section className="workspace-card workspace-card-muted">
                         <header className="detail-section-header">
                           <div>
-                            <span className="section-kicker">{t("siteTab")}</span>
+                    <span className="section-kicker">{t("contactTab")}</span>
                             <h3>{t("siteInformationTitle")}</h3>
                           </div>
                         </header>
@@ -2269,6 +3095,12 @@ function App() {
           </section>
         ) : null}
       </main>
+      {activeAgentCrewContext && isAgentCrewOpen ? (
+        <AgentCrewDrawer
+          siteContext={activeAgentCrewContext}
+          onClose={() => setIsAgentCrewOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

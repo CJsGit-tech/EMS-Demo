@@ -2,6 +2,11 @@
 
 EMS-Demo is a multi-app product workspace for an operational energy platform.
 
+The repository includes a PostgreSQL-backed EMS API contract and a React site
+workspace that can run with deterministic demo values. Sample CSV inventories
+and raw source datasets are intentionally local-only and are never required for
+the application runtime.
+
 The repository is organized around three coordinated apps:
 
 1. `site-integration-app`
@@ -157,7 +162,10 @@ Root-level `PRODUCT.md`, `DESIGN.md`, and `REQUEST.md` are compatibility pointer
 
 ## Local Development
 
-At the moment, `site-integration-app` and `internal-operations-app` are runnable as frontend apps. Each app manages its dependencies independently.
+At the moment, `site-integration-app` and `internal-operations-app` are runnable
+as frontend apps. The site integration app can also read the EMS API when the
+local PostgreSQL service and API are running. Each app manages its dependencies
+independently.
 
 Run the site integration app:
 
@@ -176,3 +184,48 @@ npm run dev
 ```
 
 To create a production build of either app, run `npm run build` from that app's directory.
+
+### EMS API and database
+
+The EMS backend lives in `services/ems-api` and exposes the unified site,
+observation, derived-metric, report, and MCP retrieval contracts described in
+`docs/context/` and `AppDeploy/agent-team/docs/`. PostgreSQL is the persistence
+boundary for site metadata, time-series observations, calculated metrics, and
+source lineage; the frontend should not calculate long-range metrics on every
+screen render.
+
+Typical local services:
+
+```bash
+# Start the local PostgreSQL service configured by the project
+docker compose up -d postgres
+
+# Start the API
+cd services/ems-api
+PYTHONPATH=src .venv/bin/python -m uvicorn agentcrew.app:app --host 0.0.0.0 --port 8004
+
+# Start the site workspace in another shell
+cd apps/site-integration-app
+VITE_AGENTCREW_API_URL=http://127.0.0.1:8004/api/v1 npm run dev -- --host 0.0.0.0 --port 5180
+```
+
+The API uses deterministic fixture values for the demo, but the schema and
+retrieval paths are designed to match the production PostgreSQL contract.
+
+## Dataset and secret policy
+
+Do not commit or push raw datasets, customer exports, credentials, database
+dumps, or generated report files. In particular, `docs/EMS-sampledata/` is
+local-only and is ignored by Git. Keep fixtures small, synthetic, and schema-
+focused; use README files or schemas to describe data shapes instead of
+including source rows.
+
+Before publishing a branch, review the exact staged file list:
+
+```bash
+git diff --cached --name-only
+git diff --cached --name-only | rg -i '(\.csv$|\.parquet$|\.sqlite$|\.db$|\.dump$|\.sql$|sampledata|datasets?|mock-data)'
+```
+
+The second command should return no files for a documentation-only or UI
+branch.
