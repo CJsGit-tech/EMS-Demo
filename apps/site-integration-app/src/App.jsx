@@ -42,6 +42,12 @@ import { buildEmsViewModel } from "./ems/emsViewModel";
 
 const MAP_VIEW_WIDTH = 800;
 const MAP_VIEW_HEIGHT = 420;
+const EMS_DATA_END = new Date("2026-07-23T00:00:00Z");
+const EMS_RANGE_OPTIONS = [
+  { id: "30d", days: 30, labelKey: "emsRange30d" },
+  { id: "90d", days: 90, labelKey: "emsRange90d" },
+  { id: "1y", days: 365, labelKey: "emsRange1y" },
+];
 const MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const PROJECTION_SCALE_GUARD = 172;
 const GEOGRAPHY_CONTEXT = createContext({
@@ -843,15 +849,22 @@ function SignalPanel({ chart, compact = false }) {
   );
 }
 
-function formatEmsChartTimestamp(timestamp) {
+function formatEmsChartTimestamp(timestamp, rangeDays = 1, locale = "en") {
   if (typeof timestamp !== "string") {
     return "—";
+  }
+
+  if (rangeDays > 31) {
+    const parsed = new Date(timestamp);
+    if (!Number.isNaN(parsed.valueOf())) {
+      return new Intl.DateTimeFormat(locale === "zh-TW" ? "zh-TW" : "en-US", { month: "2-digit", day: "2-digit", timeZone: "Asia/Taipei" }).format(parsed);
+    }
   }
 
   return timestamp.slice(11, 16) || timestamp;
 }
 
-function buildEmsLiveCharts(viewModel, locale) {
+function buildEmsLiveCharts(viewModel, locale, rangeDays) {
   const labels = locale === "zh-TW"
     ? {
       kind: "現場讀值",
@@ -878,7 +891,7 @@ function buildEmsLiveCharts(viewModel, locale) {
       xField: "time",
       yFields: ["energy"],
       yLabels: { energy: labels.energy },
-      data: viewModel.energySeries.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), energy: point.value })),
+      data: viewModel.energySeries.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), energy: point.value })),
     },
     {
       id: "ems-irradiance-live",
@@ -889,7 +902,7 @@ function buildEmsLiveCharts(viewModel, locale) {
       xField: "time",
       yFields: ["irradiance"],
       yLabels: { irradiance: labels.irradiance },
-      data: viewModel.weatherSeries.irradiance.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), irradiance: point.value })),
+      data: viewModel.weatherSeries.irradiance.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), irradiance: point.value })),
     },
     {
       id: "ems-temperature-live",
@@ -900,7 +913,7 @@ function buildEmsLiveCharts(viewModel, locale) {
       xField: "time",
       yFields: ["temperature"],
       yLabels: { temperature: labels.temperature },
-      data: viewModel.weatherSeries.temperature.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp), temperature: point.value })),
+      data: viewModel.weatherSeries.temperature.map((point) => ({ time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale), temperature: point.value })),
     },
     {
       id: "ems-performance-live",
@@ -912,14 +925,21 @@ function buildEmsLiveCharts(viewModel, locale) {
       yFields: ["performance"],
       yLabels: { performance: labels.performance },
       data: viewModel.performance.series.map((point) => ({
-        time: formatEmsChartTimestamp(point.timestamp),
+        time: formatEmsChartTimestamp(point.timestamp, rangeDays, locale),
         performance: Number.isFinite(point.value) ? point.value * 100 : point.value,
       })),
     },
   ].filter((chart) => chart.data.length > 0);
 }
 
-function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
+function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeKey, onRangeChange }) {
+  const rangeOption = EMS_RANGE_OPTIONS.find((option) => option.id === rangeKey) ?? EMS_RANGE_OPTIONS[2];
+  const rangeWindow = useMemo(() => {
+    const to = new Date(EMS_DATA_END);
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - rangeOption.days);
+    return { from, to };
+  }, [rangeOption.days]);
   const isLive = liveState.source === "postgresql" && (liveState.status === "fresh" || liveState.status === "empty");
   const sourceLabel = isLive ? t("emsPostgresSource") : t("emsFixtureSource");
   const statusLabel = liveState.status === "loading"
@@ -928,7 +948,7 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
       ? t("emsUnavailable")
       : sourceLabel;
   const signals = viewModel
-    ? buildEmsLiveCharts(viewModel, locale)
+    ? buildEmsLiveCharts(viewModel, locale, rangeOption.days)
     : liveState.status === "demo"
       ? fallbackSignals
       : [];
@@ -940,13 +960,27 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
   };
   const kpiCards = viewModel ? [
     { id: "energy-window", label: t("emsEnergyWindow"), value: viewModel.kpis.energy.state === "ready" ? `${formatChartValue(viewModel.kpis.energy.windowTotal, "kWh")}` : t("emsNoData"), detail: formatMetric(viewModel.kpis.energy) },
-    { id: "irradiance", label: t("emsIrradiance"), value: formatMetric(viewModel.kpis.irradiance), detail: viewModel.kpis.irradiance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.irradiance.latest.timestamp) : "—" },
-    { id: "temperature", label: t("emsTemperature"), value: formatMetric(viewModel.kpis.temperature), detail: viewModel.kpis.temperature.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.temperature.latest.timestamp) : "—" },
-    { id: "performance", label: t("emsPerformance"), value: viewModel.performance.latest && Number.isFinite(viewModel.performance.latest.value) ? `${formatChartValue(viewModel.performance.latest.value * 100, "%")}` : t("emsNoData"), detail: viewModel.performance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.performance.latest.timestamp) : "—" },
+    { id: "irradiance", label: t("emsIrradiance"), value: formatMetric(viewModel.kpis.irradiance), detail: viewModel.kpis.irradiance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.irradiance.latest.timestamp, rangeOption.days, locale) : "—" },
+    { id: "temperature", label: t("emsTemperature"), value: formatMetric(viewModel.kpis.temperature), detail: viewModel.kpis.temperature.latest?.timestamp ? formatEmsChartTimestamp(viewModel.kpis.temperature.latest.timestamp, rangeOption.days, locale) : "—" },
+    { id: "performance", label: t("emsPerformance"), value: viewModel.performance.latest && Number.isFinite(viewModel.performance.latest.value) ? `${formatChartValue(viewModel.performance.latest.value * 100, "%")}` : t("emsNoData"), detail: viewModel.performance.latest?.timestamp ? formatEmsChartTimestamp(viewModel.performance.latest.timestamp, rangeOption.days, locale) : "—" },
   ] : [];
 
   return (
     <>
+      <section className="ems-range-toolbar" aria-label={t("emsRangeLabel")}>
+        <div>
+          <span className="section-kicker">{t("emsRangeLabel")}</span>
+          <strong>{t(rangeOption.labelKey)}</strong>
+          <small>{rangeWindow.from.toISOString().slice(0, 10)} → {rangeWindow.to.toISOString().slice(0, 10)}</small>
+        </div>
+        <div className="ems-range-options" role="group" aria-label={t("emsRangeLabel")}>
+          {EMS_RANGE_OPTIONS.map((option) => (
+            <button key={option.id} type="button" className={option.id === rangeKey ? "is-active" : ""} aria-pressed={option.id === rangeKey} onClick={() => onRangeChange(option.id)}>
+              {t(option.labelKey)}
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="workspace-card workspace-card-live-data" data-testid="ems-live-data-card" aria-label={t("emsDataTitle")}>
         <header className="detail-section-header">
           <div>
@@ -1002,7 +1036,7 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
   );
 }
 
-function RealtimeSiteDashboard({ selectedSite, liveState, viewModel, fallbackSignals, siteAlerts, t, locale }) {
+function RealtimeSiteDashboard({ selectedSite, liveState, viewModel, fallbackSignals, siteAlerts, t, locale, rangeKey, onRangeChange }) {
   const visibleAlerts = siteAlerts.slice(0, 3);
 
   return (
@@ -1026,6 +1060,8 @@ function RealtimeSiteDashboard({ selectedSite, liveState, viewModel, fallbackSig
         fallbackSignals={fallbackSignals}
         t={t}
         locale={locale}
+        rangeKey={rangeKey}
+        onRangeChange={onRangeChange}
       />
 
       <section className="workspace-card realtime-alerts-card" aria-label={t("alerts")}>
@@ -1100,6 +1136,7 @@ function App() {
   const [previewAnchor, setPreviewAnchor] = useState(null);
   const [mapZoomOffset, setMapZoomOffset] = useState(0);
   const [siteTab, setSiteTab] = useState("realtime");
+  const [emsRangeKey, setEmsRangeKey] = useState("1y");
   const [isAgentCrewOpen, setIsAgentCrewOpen] = useState(false);
   const [emsLiveState, setEmsLiveState] = useState({ status: "loading", source: "postgresql", snapshot: null, model: null, error: null });
   const [selectedReportId, setSelectedReportId] = useState(null);
@@ -1142,6 +1179,9 @@ function App() {
     loadEmsDashboardData({
       siteCode,
       userId: "demo-user",
+      from: (() => { const date = new Date(EMS_DATA_END); date.setUTCDate(date.getUTCDate() - (EMS_RANGE_OPTIONS.find((option) => option.id === emsRangeKey)?.days ?? 365)); return date; })(),
+      to: EMS_DATA_END,
+      interval: "day",
       signal: controller.signal,
     })
       .then((payload) => {
@@ -1178,7 +1218,7 @@ function App() {
       });
 
     return () => { controller.abort(); };
-  }, [activeScreen, locale, selectedSite]);
+  }, [activeScreen, emsRangeKey, locale, selectedSite]);
   const activeLocaleOption = i18nConfig.locales.find((language) => language.id === locale) ?? i18nConfig.locales[0];
   const hasExplicitSiteSelection = Boolean(selectedSiteId);
   const siteWorkspace = useMemo(() => buildSiteWorkspace(selectedSite, locale, emsLiveState), [locale, selectedSite, emsLiveState]);
@@ -2724,15 +2764,17 @@ function App() {
                   role="tabpanel"
                   aria-labelledby={`${selectedSite.id}-realtime-tab`}
                 >
-                  <RealtimeSiteDashboard
-                    selectedSite={selectedSite}
-                    liveState={emsLiveState}
-                    viewModel={emsLiveState.model}
-                    fallbackSignals={siteWorkspace.charts?.ems ?? []}
-                    siteAlerts={siteAlerts}
-                    t={t}
-                    locale={locale}
-                  />
+            <RealtimeSiteDashboard
+              selectedSite={selectedSite}
+              liveState={emsLiveState}
+              viewModel={emsLiveState.model}
+              fallbackSignals={siteWorkspace.charts?.ems ?? []}
+              siteAlerts={siteAlerts}
+              t={t}
+              locale={locale}
+              rangeKey={emsRangeKey}
+              onRangeChange={setEmsRangeKey}
+            />
                 </div>
               ) : null}
 

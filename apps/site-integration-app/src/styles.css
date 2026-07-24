@@ -2067,6 +2067,36 @@ tbody tr:focus-visible {
 }
 
 .ems-kpi-section { display: grid; gap: 10px; }
+.ems-range-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ems-range-toolbar > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.ems-range-toolbar strong { color: var(--ink); font-size: 14px; }
+.ems-range-toolbar small { color: var(--muted); font-size: 11px; }
+.ems-range-options { display: flex; flex-wrap: wrap; gap: 5px; }
+.ems-range-options button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ems-range-options button:hover,
+.ems-range-options button.is-active {
+  border-color: color-mix(in oklab, var(--primary) 36%, var(--line));
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+  color: var(--ink);
+}
 .ems-kpi-heading { display: flex; align-items: center; justify-content: space-between; }
 .ems-kpi-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ems-kpi-card { min-width: 0; }
@@ -3200,6 +3230,9 @@ tbody tr:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .ems-range-toolbar { align-items: stretch; flex-direction: column; }
+  .ems-range-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ems-range-options button { padding: 0 5px; }
   .site-overview-metrics,
   .signal-dashboard,
   .ems-kpi-strip,

@@ -12,12 +12,13 @@ function appendDateRange(query, from, to) {
   }
 }
 
-function buildMetricQuery(metricCodes, { from, to, limit = 1000 } = {}) {
+function buildMetricQuery(metricCodes, { from, to, interval = "day", limit = 1000 } = {}) {
   const query = new URLSearchParams();
   appendDateRange(query, from, to);
   for (const metricCode of metricCodes) {
     query.append("metric_codes", metricCode);
   }
+  query.append("interval", interval);
   query.append("limit", String(limit));
   return query;
 }
@@ -29,9 +30,8 @@ function createEmsError(status) {
   return error;
 }
 
-export async function loadEmsDashboardData({ siteCode, userId, from, to, signal }) {
-  const observationQuery = buildMetricQuery(OBSERVATION_METRIC_CODES, { from, to });
-  const derivedQuery = buildMetricQuery(DERIVED_METRIC_CODES, { from, to });
+export async function loadEmsDashboardData({ siteCode, userId, from, to, interval = "day", signal }) {
+  const derivedQuery = buildMetricQuery(DERIVED_METRIC_CODES, { from, to, interval });
   const headers = { "x-user-id": userId };
 
   const read = async (path) => {
@@ -42,12 +42,17 @@ export async function loadEmsDashboardData({ siteCode, userId, from, to, signal 
     return response.json();
   };
 
-  const [snapshot, observations, derived, catalog] = await Promise.all([
+  const [snapshot, observationResponses, derived, catalog] = await Promise.all([
     read(""),
-    read(`/observations?${observationQuery.toString()}`),
+    Promise.all(OBSERVATION_METRIC_CODES.map((metricCode) => read(`/observations?${buildMetricQuery([metricCode], { from, to, interval }).toString()}`))),
     read(`/reports?${derivedQuery.toString()}`),
     read("/metrics"),
   ]);
+
+  const observations = {
+    ...observationResponses[0],
+    records: observationResponses.flatMap((response) => response.records ?? []).sort((left, right) => new Date(left.timestamp).valueOf() - new Date(right.timestamp).valueOf()),
+  };
 
   return { snapshot, observations, derived, catalog };
 }
