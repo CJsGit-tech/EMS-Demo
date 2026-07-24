@@ -3343,6 +3343,303 @@ tbody tr:focus-visible {
 .realtime-alert-row > span:last-child { color: var(--muted); font-size: 12px; }
 .realtime-empty-alerts { margin: 0; color: var(--muted); font-size: 13px; }
 
+/* EMS operations console: dense, calm, chart-led visual hierarchy. */
+.realtime-dashboard {
+  gap: 10px;
+}
+
+.ems-range-toolbar {
+  min-height: 58px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--surface) 74%, var(--bg));
+}
+
+.ems-range-options button {
+  min-height: 34px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.ems-range-options button.is-active {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.ems-command-dashboard {
+  display: grid;
+  gap: 10px;
+}
+
+.ems-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.ems-metric-card {
+  min-width: 0;
+  min-height: 104px;
+  padding: 15px 16px 13px;
+  background: color-mix(in oklab, var(--surface) 84%, var(--bg));
+}
+
+.ems-metric-card > span {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ems-metric-card strong {
+  display: block;
+  margin-top: 11px;
+  color: var(--ink);
+  font-size: clamp(18px, 2vw, 27px);
+  font-weight: 800;
+  letter-spacing: -.04em;
+  line-height: 1;
+}
+
+.ems-metric-card small {
+  display: block;
+  margin-top: 8px;
+  color: var(--primary);
+  font-size: 11px;
+}
+
+.ems-primary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 10px;
+}
+
+.ems-primary-chart,
+.ems-side-card,
+.ems-data-table-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--surface) 78%, var(--bg));
+}
+
+.ems-primary-chart {
+  padding: 16px 17px 11px;
+}
+
+.ems-module-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ems-module-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ems-module-heading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ems-module-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.ems-module-heading > strong {
+  color: var(--primary);
+  font-size: 22px;
+  letter-spacing: -.04em;
+  white-space: nowrap;
+}
+
+.ems-primary-chart .signal-panel {
+  margin-top: 8px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ems-primary-chart .signal-panel-header {
+  display: none;
+}
+
+.ems-primary-chart .signal-chart-svg {
+  height: 260px;
+}
+
+.ems-primary-chart .signal-line {
+  stroke-width: 2.8;
+}
+
+.ems-side-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.ems-side-card {
+  padding: 15px 16px;
+}
+
+.ems-weather-readout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 10px;
+  color: var(--primary);
+}
+
+.ems-weather-readout strong {
+  color: var(--ink);
+  font-size: 26px;
+  letter-spacing: -.04em;
+}
+
+.ems-side-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ems-side-card dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ems-side-card dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ems-side-card dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: right;
+}
+
+.ems-energy-list {
+  margin-top: 15px !important;
+}
+
+.ems-energy-list .is-total {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.ems-energy-list .is-total dd {
+  color: var(--primary);
+}
+
+.ems-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ems-data-table-card {
+  padding: 15px 16px 9px;
+}
+
+.ems-table-link {
+  color: var(--focus) !important;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
+.ems-inverter-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.ems-inverter-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.ems-inverter-table th,
+.ems-inverter-table td {
+  padding: 8px 5px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 72%, transparent);
+  text-align: left;
+}
+
+.ems-inverter-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.ems-inverter-table td {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.ems-inverter-table td:not(:first-child) {
+  text-align: right;
+}
+
+.ems-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--healthy);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--healthy) 15%, transparent);
+}
+
+.ems-lower-grid > .signal-panel {
+  min-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: color-mix(in oklab, var(--surface) 78%, var(--bg));
+}
+
+.realtime-alerts-card {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--surface) 78%, var(--bg));
+}
+
+@media (max-width: 1100px) {
+  .ems-metric-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ems-lower-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ems-data-table-card { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .ems-metric-strip,
+  .ems-primary-grid,
+  .ems-lower-grid { grid-template-columns: 1fr; }
+  .ems-metric-card { min-height: 90px; }
+  .ems-primary-chart .signal-chart-svg { height: 210px; }
+  .ems-side-stack { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 720px) {
   .workspace-hero-realtime { grid-template-columns: 1fr; gap: 14px; }
   .realtime-site-status { justify-self: start; }

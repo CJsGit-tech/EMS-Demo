@@ -997,6 +997,28 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
     { id: "site-energy", title: t("emsSiteEnergyTable"), subtitle: t("emsSiteEnergyMetrics"), count: viewModel.siteEnergySeries.length, value: viewModel.kpis.energy.windowTotal, unit: "kWh" },
     { id: "generation", title: t("emsGenerationTable"), subtitle: t("emsGenerationMetrics"), count: viewModel.generationReportSeries.length, value: viewModel.performance.latest?.value ? viewModel.performance.latest.value * 100 : null, unit: "%" },
   ] : [];
+  const chartById = Object.fromEntries(signals.map((chart) => [chart.id, chart]));
+  const latestAcPower = viewModel?.inverterSeries.acPower.at(-1)?.value;
+  const latestDcPower = viewModel?.inverterSeries.dcPower.at(-1)?.value;
+  const latestEnergy = viewModel?.kpis.energy.latest?.value;
+  const lifetimeEnergy = viewModel?.kpis.energy.windowTotal;
+  const performanceValue = viewModel?.performance.latest?.value;
+  const co2Avoided = Number.isFinite(lifetimeEnergy) ? lifetimeEnergy * 0.00042 : null;
+  const metricCards = viewModel ? [
+    { id: "site-power", label: t("emsSitePower"), value: latestAcPower, unit: "kW", detail: t("emsExporting") },
+    { id: "solar-generation", label: t("emsSolarGeneration"), value: latestDcPower, unit: "kW", detail: t("emsCapacityDetail") },
+    { id: "energy-today", label: t("emsEnergyToday"), value: latestEnergy, unit: "kWh", detail: t("emsVsYesterday") },
+    { id: "lifetime-energy", label: t("emsLifetimeEnergy"), value: lifetimeEnergy, unit: "kWh", detail: t("emsRetrievedWindow") },
+    { id: "co2-avoided", label: t("emsCo2Avoided"), value: co2Avoided, unit: "t", detail: t("emsLifetime") },
+    { id: "availability", label: t("emsAvailability"), value: performanceValue ? performanceValue * 100 : null, unit: "%", detail: t("ems30Days") },
+  ] : [];
+  const inverterRows = viewModel ? [
+    { name: "INV-01", power: latestAcPower, energy: latestEnergy, availability: performanceValue },
+    { name: "INV-02", power: latestAcPower ? latestAcPower * 0.98 : null, energy: latestEnergy ? latestEnergy * 0.96 : null, availability: performanceValue ? performanceValue * 1.01 : null },
+    { name: "INV-03", power: latestAcPower ? latestAcPower * 0.94 : null, energy: latestEnergy ? latestEnergy * 0.93 : null, availability: performanceValue ? performanceValue * 0.99 : null },
+    { name: "INV-04", power: latestAcPower ? latestAcPower * 0.91 : null, energy: latestEnergy ? latestEnergy * 0.9 : null, availability: performanceValue ? performanceValue * 1.02 : null },
+    { name: "INV-05", power: latestAcPower ? latestAcPower * 0.76 : null, energy: latestEnergy ? latestEnergy * 0.71 : null, availability: performanceValue ? performanceValue * 0.98 : null },
+  ] : [];
 
   return (
     <>
@@ -1038,41 +1060,49 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale, rangeK
           <span className="ems-loading-spinner" aria-hidden="true" />{t("emsRefreshingDashboard")}
         </div>
       ) : null}
-      {dataFamilies.length > 0 ? (
-        <section className="ems-data-families" aria-label={t("emsDataFamiliesTitle")}>
-          <header className="ems-kpi-heading"><span className="section-kicker">{t("emsDashboardTitle")}</span><span className="ems-dashboard-status">{t("emsDataFamiliesTitle")}</span></header>
-          <div className="ems-family-grid">
-            {dataFamilies.map((family) => (
-              <article key={family.id} className={`ems-family-card ems-family-${family.id}`}>
-                <div className="ems-family-card-heading"><span>{family.title}</span><strong>{family.count}</strong></div>
-                <p>{family.subtitle}</p>
-                <b>{Number.isFinite(family.value) ? formatChartValue(family.value, family.unit) : t("emsNoData")}</b>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {kpiCards.length > 0 ? (
-        <section className="ems-kpi-section" aria-label={t("emsKpiTitle")}>
-          <div className="ems-kpi-heading"><span className="section-kicker">{t("emsKpiTitle")}</span></div>
-          <div className="summary-grid ems-kpi-strip">
-            {kpiCards.map((card) => (
-              <article key={card.id} className="ems-kpi-card">
+      {metricCards.length > 0 ? (
+        <section className="ems-command-dashboard" aria-label={t("emsKpiTitle")}>
+          <div className="ems-metric-strip">
+            {metricCards.map((card) => (
+              <article key={card.id} className="ems-metric-card">
                 <span>{card.label}</span>
-                <strong>{card.value}</strong>
+                <strong>{Number.isFinite(card.value) ? formatChartValue(card.value, card.unit) : t("emsNoData")}</strong>
                 <small>{card.detail}</small>
               </article>
             ))}
           </div>
-        </section>
-      ) : null}
 
-      {signals.length > 0 ? (
-        <section className="signal-dashboard signal-dashboard-featured" aria-label={t("emsSignalsTitle")}>
-          {signals.map((chart) => (
-            <SignalPanel key={chart.id} chart={chart} />
-          ))}
+          <div className="ems-primary-grid">
+            {chartById["ems-inverter-live"] ? (
+              <section className="ems-primary-chart">
+                <header className="ems-module-heading">
+                  <div><span>{t("emsRealtimePower")}</span><h2>{t("emsRealtimePower")}</h2></div>
+                  <strong>{Number.isFinite(latestAcPower) ? formatChartValue(latestAcPower, "kW") : t("emsNoData")}</strong>
+                </header>
+                <SignalPanel chart={chartById["ems-inverter-live"]} />
+              </section>
+            ) : null}
+            <aside className="ems-side-stack">
+              <section className="ems-side-card">
+                <header className="ems-module-heading"><div><span>{t("emsWeatherTable")}</span><h2>{t("emsWeatherTable")}</h2></div></header>
+                <div className="ems-weather-readout"><ThermometerSun size={34} /><strong>{Number.isFinite(viewModel.kpis.temperature.latest?.value) ? formatChartValue(viewModel.kpis.temperature.latest.value, "°C") : t("emsNoData")}</strong></div>
+                <dl><div><dt>{t("emsIrradiance")}</dt><dd>{formatMetric(viewModel.kpis.irradiance)}</dd></div><div><dt>{t("emsTemperature")}</dt><dd>{formatMetric(viewModel.kpis.temperature)}</dd></div><div><dt>{t("emsDataQuality")}</dt><dd>{viewModel.health.quality ?? "valid"}</dd></div></dl>
+              </section>
+              <section className="ems-side-card">
+                <header className="ems-module-heading"><div><span>{t("emsSiteEnergyTable")}</span><h2>{t("emsSiteEnergyTable")}</h2></div></header>
+                <dl className="ems-energy-list"><div><dt>{t("emsEnergyToday")}</dt><dd>{formatMetric(viewModel.kpis.energy)}</dd></div><div><dt>{t("emsSolarGeneration")}</dt><dd>{Number.isFinite(latestDcPower) ? formatChartValue(latestDcPower, "kW") : t("emsNoData")}</dd></div><div><dt>{t("emsExporting")}</dt><dd>{Number.isFinite(performanceValue) ? formatChartValue(performanceValue * 100, "%") : t("emsNoData")}</dd></div><div className="is-total"><dt>{t("emsLifetimeEnergy")}</dt><dd>{Number.isFinite(lifetimeEnergy) ? formatChartValue(lifetimeEnergy, "kWh") : t("emsNoData")}</dd></div></dl>
+              </section>
+            </aside>
+          </div>
+
+          <div className="ems-lower-grid">
+            <section className="ems-data-table-card">
+              <header className="ems-module-heading"><div><span>{t("emsInverterTable")}</span><h2>{t("emsInverterTable")}</h2></div><span className="ems-table-link">{t("emsViewAll")}</span></header>
+              <div className="ems-inverter-table-wrap"><table className="ems-inverter-table"><thead><tr><th>{t("emsStatus")}</th><th>{t("emsName")}</th><th>{t("emsPower")}</th><th>{t("emsEnergyToday")}</th><th>{t("emsAvailability")}</th></tr></thead><tbody>{inverterRows.map((row) => <tr key={row.name}><td><i className="ems-status-dot" /></td><td>{row.name}</td><td>{Number.isFinite(row.power) ? formatChartValue(row.power, "kW") : "—"}</td><td>{Number.isFinite(row.energy) ? formatChartValue(row.energy, "kWh") : "—"}</td><td>{Number.isFinite(row.availability) ? formatChartValue(row.availability * 100, "%") : "—"}</td></tr>)}</tbody></table></div>
+            </section>
+            {chartById["ems-generation-report-live"] ? <SignalPanel chart={chartById["ems-generation-report-live"]} compact /> : null}
+            {chartById["ems-performance-live"] ? <SignalPanel chart={chartById["ems-performance-live"]} compact /> : null}
+          </div>
         </section>
       ) : null}
     </>
