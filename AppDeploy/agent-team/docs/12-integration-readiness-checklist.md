@@ -15,6 +15,7 @@
 - [x] No cross-site read, unsafe HTML, secret exposure, hidden reasoning exposure, or false success state was found in executed checks.
 - [x] Visual evidence covers the verified desktop/narrow drawer states.
 - [x] Current-data EMS dashboard uses the real REST response field contract, renders only supported observations/derived metrics, and keeps missing weather metrics visibly unavailable.
+- [x] Focused site workspace uses exactly three accessible tabs: realtime data + metrics + alerts, reports, and site contact information; desktop and 375px layouts have been verified in-app without horizontal overflow.
 
 ## Blocking defects
 

@@ -3237,6 +3237,54 @@ tbody tr:focus-visible {
   }
 }
 
+/* Focused site workspace: three destinations, one clear operating surface. */
+.site-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface-strong) 70%, transparent);
+}
+
+.site-tabs button,
+.site-tabs button.is-active {
+  min-height: 42px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.site-tabs button.is-active {
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: 0 2px 6px color-mix(in oklab, var(--shadow-color) 10%, transparent);
+}
+
+.realtime-dashboard { display: grid; gap: 14px; }
+.workspace-hero-realtime { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 16px 18px; }
+.workspace-hero-realtime h2 { font-size: 24px; }
+.workspace-hero-realtime p { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.realtime-site-status { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 8px; color: var(--muted); font-size: 12px; }
+.realtime-site-status .status-dot { grid-row: span 2; }
+.realtime-site-status strong { color: var(--ink); font-size: 13px; }
+.realtime-alerts-card { gap: 12px; }
+.realtime-alert-count { min-width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; background: color-mix(in oklab, var(--watch) 14%, var(--surface)); color: var(--watch); }
+.realtime-alert-list { display: grid; gap: 0; }
+.realtime-alert-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--line); }
+.realtime-alert-row strong { min-width: 0; overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.realtime-alert-row > span:last-child { color: var(--muted); font-size: 12px; }
+.realtime-empty-alerts { margin: 0; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .workspace-hero-realtime { grid-template-columns: 1fr; gap: 14px; }
+  .realtime-site-status { justify-self: start; }
+  .realtime-alert-row { grid-template-columns: auto minmax(0, 1fr); }
+  .realtime-alert-row > span:last-child { grid-column: 2; }
+}
+
 @media (pointer: coarse) {
   .site-tabs button,
   .locale-token-button,

@@ -603,12 +603,9 @@ const portfolioScreens = [
 ];
 
 const siteTabs = [
-  { id: "overview", labelKey: "overview" },
-  { id: "devices", labelKey: "devices" },
-  { id: "ems", labelKey: "ems" },
+  { id: "realtime", labelKey: "realtimeTab" },
   { id: "reports", labelKey: "reports" },
-  { id: "alerts", labelKey: "alerts" },
-  { id: "site", labelKey: "siteTab" },
+  { id: "contact", labelKey: "contactTab" },
 ];
 
 function getRegionKey(region) {
@@ -1005,6 +1002,56 @@ function EmsDashboard({ liveState, viewModel, fallbackSignals, t, locale }) {
   );
 }
 
+function RealtimeSiteDashboard({ selectedSite, liveState, viewModel, fallbackSignals, siteAlerts, t, locale }) {
+  const visibleAlerts = siteAlerts.slice(0, 3);
+
+  return (
+    <div className="realtime-dashboard">
+      <section className="workspace-hero workspace-hero-realtime">
+        <div>
+          <span className="section-kicker">{t("realtimeTab")}</span>
+          <h2>{t("realtimeTitle")}</h2>
+          <p>{t("realtimeBody")}</p>
+        </div>
+        <div className="realtime-site-status">
+          <span className={`status-dot ${selectedSite.status}`} />
+          <strong>{selectedSite.name}</strong>
+          <span>{selectedSite.city}</span>
+        </div>
+      </section>
+
+      <EmsDashboard
+        liveState={liveState}
+        viewModel={viewModel}
+        fallbackSignals={fallbackSignals}
+        t={t}
+        locale={locale}
+      />
+
+      <section className="workspace-card realtime-alerts-card" aria-label={t("alerts")}>
+        <header className="detail-section-header">
+          <div>
+            <span className="section-kicker">{t("alerts")}</span>
+            <h3>{t("realtimeAlertsTitle")}</h3>
+          </div>
+          <strong className="realtime-alert-count">{siteAlerts.length}</strong>
+        </header>
+        {visibleAlerts.length > 0 ? (
+          <div className="realtime-alert-list">
+            {visibleAlerts.map((alert) => (
+              <div className="realtime-alert-row" key={alert.id}>
+                <span className={`status-label ${alert.severity}`}>{alert.status}</span>
+                <strong>{alert.title}</strong>
+                <span>{alert.owner}</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="realtime-empty-alerts">{t("noAlertsTitle")}</p>}
+      </section>
+    </div>
+  );
+}
+
 function pushRoute(fragment) {
   if (window.location.hash !== `#${fragment}`) {
     window.history.pushState(null, "", `#${fragment}`);
@@ -1052,7 +1099,7 @@ function App() {
   const [countryAtlasLoadAttempt, setCountryAtlasLoadAttempt] = useState(0);
   const [previewAnchor, setPreviewAnchor] = useState(null);
   const [mapZoomOffset, setMapZoomOffset] = useState(0);
-  const [siteTab, setSiteTab] = useState("overview");
+  const [siteTab, setSiteTab] = useState("realtime");
   const [isAgentCrewOpen, setIsAgentCrewOpen] = useState(false);
   const [emsLiveState, setEmsLiveState] = useState({ status: "loading", source: "postgresql", snapshot: null, model: null, error: null });
   const [selectedReportId, setSelectedReportId] = useState(null);
@@ -1240,7 +1287,7 @@ function App() {
       if (!route || route === "overview") {
         setActiveScreen("overview");
         setSelectedSiteId(null);
-        setSiteTab("overview");
+        setSiteTab("realtime");
         setActiveMarkerId(null);
         setIsMapPreviewOpen(false);
         setPreviewMode("site");
@@ -1263,13 +1310,14 @@ function App() {
           setIsMapPreviewOpen(false);
           setPreviewMode("site");
           setDrillCountry(null);
-          setSiteTab(siteTabs.some((tab) => tab.id === requestedTab) ? requestedTab : "overview");
+          const normalizedTab = requestedTab === "site" ? "contact" : ["overview", "devices", "ems", "alerts"].includes(requestedTab) ? "realtime" : requestedTab;
+          setSiteTab(siteTabs.some((tab) => tab.id === normalizedTab) ? normalizedTab : "realtime");
           return;
         }
 
         setActiveScreen("overview");
         setSelectedSiteId(null);
-        setSiteTab("overview");
+        setSiteTab("realtime");
         setActiveMarkerId(null);
         setIsMapPreviewOpen(false);
         setPreviewMode("site");
@@ -1283,14 +1331,14 @@ function App() {
         setIsMapPreviewOpen(false);
         setPreviewMode("site");
         setDrillCountry(null);
-        setSiteTab("overview");
+        setSiteTab("realtime");
         setSelectedSiteId(null);
         return;
       }
 
       setActiveScreen("overview");
       setSelectedSiteId(null);
-      setSiteTab("overview");
+      setSiteTab("realtime");
       setActiveMarkerId(null);
       setIsMapPreviewOpen(false);
       setPreviewMode("site");
@@ -1613,9 +1661,9 @@ function App() {
     setIsMapPreviewOpen(false);
     setPreviewMode("site");
     setDrillCountry(null);
-    setSiteTab("overview");
+    setSiteTab("realtime");
     setActiveScreen("site-detail");
-    pushRoute(`site/${siteId}/overview`);
+    pushRoute(`site/${siteId}/realtime`);
   }
 
   function handleNavigate(screenId) {
@@ -2313,9 +2361,9 @@ function App() {
                     type="button"
                     className={`module-row ${isConnected ? "is-connected" : ""}`}
                     onClick={() => {
-                      setSiteTab("devices");
+                      setSiteTab("realtime");
                       setActiveScreen("site-detail");
-                      pushRoute(`site/${selectedSite.id}/devices`);
+                      pushRoute(`site/${selectedSite.id}/realtime`);
                     }}
                   >
                     <Icon size={18} />
@@ -2385,7 +2433,7 @@ function App() {
                 ))}
               </div>
 
-              {siteTab === "overview" ? (
+              {siteTab === "__legacy-overview" ? (
                 <div
                   id={`${selectedSite.id}-overview-panel`}
                   className="site-tab-panel"
@@ -2478,7 +2526,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "devices" ? (
+              {siteTab === "__legacy-devices" ? (
                 <div
                   id={`${selectedSite.id}-devices-panel`}
                   className="site-tab-panel"
@@ -2577,7 +2625,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "ems" ? (
+              {siteTab === "__legacy-ems" ? (
                 <div
                   id={`${selectedSite.id}-ems-panel`}
                   className="site-tab-panel"
@@ -2666,6 +2714,25 @@ function App() {
                       </div>
                     )}
                   </section>
+                </div>
+              ) : null}
+
+              {siteTab === "realtime" ? (
+                <div
+                  id={`${selectedSite.id}-realtime-panel`}
+                  className="site-tab-panel"
+                  role="tabpanel"
+                  aria-labelledby={`${selectedSite.id}-realtime-tab`}
+                >
+                  <RealtimeSiteDashboard
+                    selectedSite={selectedSite}
+                    liveState={emsLiveState}
+                    viewModel={emsLiveState.model}
+                    fallbackSignals={siteWorkspace.charts?.ems ?? []}
+                    siteAlerts={siteAlerts}
+                    t={t}
+                    locale={locale}
+                  />
                 </div>
               ) : null}
 
@@ -2791,7 +2858,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "alerts" ? (
+              {siteTab === "__legacy-alerts" ? (
                 <div
                   id={`${selectedSite.id}-alerts-panel`}
                   className="site-tab-panel"
@@ -2858,7 +2925,7 @@ function App() {
                 </div>
               ) : null}
 
-              {siteTab === "site" ? (
+              {siteTab === "contact" ? (
                 <div
                   id={`${selectedSite.id}-site-panel`}
                   className="site-tab-panel"
@@ -2870,7 +2937,7 @@ function App() {
                       <section className="workspace-card workspace-card-muted">
                         <header className="detail-section-header">
                           <div>
-                            <span className="section-kicker">{t("siteTab")}</span>
+                    <span className="section-kicker">{t("contactTab")}</span>
                             <h3>{t("siteInformationTitle")}</h3>
                           </div>
                         </header>
