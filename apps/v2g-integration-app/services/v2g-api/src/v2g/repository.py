@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, func, select, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from v2g.models import AuditRecord, Base
@@ -14,33 +14,40 @@ from v2g.models import AuditRecord, Base
 class V2GRepository:
     """The API's sole persistence writer for simulator data."""
 
-    def __init__(self, engine: Engine):
+    SQLITE_TEST_URL = "sqlite+aiosqlite:///:memory:"
+
+    def __init__(self, engine: AsyncEngine):
         self._engine = engine
-        self._sessions = sessionmaker(bind=engine, expire_on_commit=False)
+        self._sessions = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     @classmethod
     def in_memory(cls) -> "V2GRepository":
         return cls(
-            create_engine(
-                "sqlite+pysqlite:///:memory:",
+            create_async_engine(
+                cls.SQLITE_TEST_URL,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool,
             )
         )
 
     async def create_schema(self) -> None:
-        Base.metadata.create_all(self._engine)
+        """Create schema only for the explicit in-memory SQLite test database."""
+        if self._engine.url.render_as_string(hide_password=False) != self.SQLITE_TEST_URL:
+            raise RuntimeError("create_schema() is restricted to the SQLite test database")
+
+        async with self._engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
 
     async def dispose(self) -> None:
-        self._engine.dispose()
+        await self._engine.dispose()
 
     async def append_audit(
         self, command_id: str, event_type: str, payload: dict[str, Any]
     ) -> AuditRecord:
         """Append an immutable command event with a transaction-local sequence."""
-        with self._sessions.begin() as session:
-            self._lock_audit_stream(session, command_id)
-            sequence = session.scalar(
+        async with self._sessions.begin() as session:
+            await self._lock_audit_stream(session, command_id)
+            sequence = await session.scalar(
                 select(func.coalesce(func.max(AuditRecord.sequence), 0) + 1).where(
                     AuditRecord.command_id == command_id
                 )
@@ -52,22 +59,24 @@ class V2GRepository:
                 payload=payload,
             )
             session.add(record)
-            session.flush()
+            await session.flush()
             return record
 
     async def audit_events(self, command_id: str) -> list[AuditRecord]:
-        with self._sessions() as session:
+        async with self._sessions() as session:
             return list(
-                session.scalars(
+                (
+                    await session.scalars(
                     select(AuditRecord)
                     .where(AuditRecord.command_id == command_id)
                     .order_by(AuditRecord.sequence)
+                    )
                 )
             )
 
-    def _lock_audit_stream(self, session: Session, command_id: str) -> None:
+    async def _lock_audit_stream(self, session: AsyncSession, command_id: str) -> None:
         if self._engine.dialect.name == "postgresql":
-            session.execute(
+            await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:command_id))"),
                 {"command_id": command_id},
             )
