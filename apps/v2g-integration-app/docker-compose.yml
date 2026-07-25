@@ -5,29 +5,48 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: v2g_simulator
-      POSTGRES_USER: v2g_simulator
-      POSTGRES_PASSWORD: v2g_simulator_local_only
+      # This cluster superuser is used only during first-volume initialization;
+      # migrations use v2g_owner and the API uses v2g_runtime.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: v2g_postgres_init_local_only
       POSTGRES_INITDB_ARGS: --auth=scram-sha-256
     volumes:
       - v2g-postgres-data:/var/lib/postgresql/data
+      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U v2g_simulator -d v2g_simulator"]
+      test: ["CMD-SHELL", "pg_isready -U v2g_owner -d v2g_simulator"]
       interval: 2s
       timeout: 3s
       retries: 30
       start_period: 5s
     networks: [simulator]
 
+  migrator:
+    build:
+      context: ./services/v2g-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://v2g_owner:v2g_owner_local_only@postgres:5432/v2g_simulator
+    command: ["sh", "-ec", "alembic upgrade head && python -m v2g.bootstrap"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks: [simulator]
+
   api:
     build:
       context: ./services/v2g-api
     environment:
-      DATABASE_URL: postgresql+asyncpg://v2g_simulator:v2g_simulator_local_only@postgres:5432/v2g_simulator
+      DATABASE_URL: postgresql+asyncpg://v2g_runtime:v2g_runtime_local_only@postgres:5432/v2g_simulator
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8005:8000"
+      - "127.0.0.1:${V2G_API_HOST_PORT:-8005}:8000"
     expose:
       - "8000"
     read_only: true
@@ -53,15 +72,14 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5181:80"
+      - "127.0.0.1:${V2G_UI_HOST_PORT:-5181}:8080"
     read_only: true
     tmpfs:
-      - /var/cache/nginx
-      - /var/run
+      - /tmp
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:8080/ || exit 1"]
       interval: 2s
       timeout: 3s
       retries: 20

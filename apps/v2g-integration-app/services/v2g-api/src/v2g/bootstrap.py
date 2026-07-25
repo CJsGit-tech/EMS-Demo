@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from v2g.seed import seed_demo_fleet
@@ -21,11 +22,42 @@ async def seed_database(database_url: str) -> None:
         await engine.dispose()
 
 
+async def grant_runtime_access(database_url: str) -> None:
+    """Grant the API role only the privileges needed by the simulator.
+
+    This runs after every owner-led migration so grants remain correct for a
+    reused local volume as well as a new database.  ``audit_records`` is
+    intentionally narrowed to append/read operations after the broad table
+    grant because the runtime role must never change or remove audit history.
+    """
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            for statement in (
+                "REVOKE ALL ON SCHEMA public FROM v2g_runtime",
+                "GRANT USAGE ON SCHEMA public TO v2g_runtime",
+                "GRANT CONNECT ON DATABASE v2g_simulator TO v2g_runtime",
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO v2g_runtime",
+                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime",
+                "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records FROM v2g_runtime",
+                "GRANT SELECT, INSERT ON TABLE audit_records TO v2g_runtime",
+                "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO v2g_runtime",
+                "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO v2g_runtime",
+            ):
+                await connection.execute(text(statement))
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL is required to seed the V2G simulator")
-    asyncio.run(seed_database(database_url))
+    async def bootstrap_database() -> None:
+        await seed_database(database_url)
+        await grant_runtime_access(database_url)
+
+    asyncio.run(bootstrap_database())
 
 
 if __name__ == "__main__":

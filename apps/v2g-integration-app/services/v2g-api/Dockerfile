@@ -18,4 +18,4 @@ USER v2g
 
 EXPOSE 8000
 
-CMD ["sh", "-ec", "alembic upgrade head && python -m v2g.bootstrap && exec uvicorn v2g.app:app --host 0.0.0.0 --port 8000"]
+CMD ["uvicorn", "v2g.app:app", "--host", "0.0.0.0", "--port", "8000"]
