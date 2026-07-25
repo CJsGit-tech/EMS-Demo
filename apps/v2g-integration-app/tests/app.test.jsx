@@ -73,8 +73,8 @@ test("opens the existing Operations workspace from the localized operations navi
 
   await user.click(screen.getByRole("button", { name: "營運儀表板" }));
 
-  expect(await screen.findByRole("heading", { name: "Operations" })).toBeVisible();
-  expect(screen.getByText("Site power trajectory")).toBeVisible();
+  expect(await screen.findByRole("heading", { name: "營運" })).toBeVisible();
+  expect(screen.getByText("站點功率軌跡")).toBeVisible();
   expect(screen.getByRole("button", { name: "營運儀表板" })).toHaveAttribute("aria-current", "page");
 });
 
