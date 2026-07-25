@@ -55,6 +55,25 @@ def test_expired_command_cannot_be_approved():
     asyncio.run(scenario())
 
 
+def test_approval_cannot_cross_the_expiry_boundary_between_clock_reads():
+    async def scenario():
+        expires_at = NOW + timedelta(minutes=15)
+        approval_started_at = expires_at - timedelta(microseconds=1)
+        clock_values = iter(
+            [NOW, NOW, NOW, NOW, approval_started_at, expires_at]
+        )
+        commands = CommandService(site_state(), now=lambda: next(clock_values))
+        command = await commands.request(valid_request(expires_at=expires_at))
+
+        approved = await commands.approve(command.command_id, actor="operator-01")
+
+        assert approved.state == "approved"
+        assert approved.audit_events[-1].occurred_at == approval_started_at
+        assert approved.audit_events[-1].occurred_at < approved.expires_at
+
+    asyncio.run(scenario())
+
+
 def test_same_idempotency_key_returns_the_original_command():
     async def scenario():
         commands = service()

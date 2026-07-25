@@ -160,11 +160,17 @@ class CommandService:
     async def approve(self, command_id: str, actor: str) -> SimulatedCommand:
         """Record a named operator's approval for a non-expired command."""
         async with self._repository.lock:
+            operation_at = self._timestamp()
             command = self._require_command(command_id)
-            command = self._expire_if_needed(command)
+            command = self._expire_if_needed(command, operation_at)
             self._require_non_empty(actor, "actor")
             self._require_state(command, "awaiting_approval")
-            approved = self._transition(command, "approved", actor=actor.strip())
+            approved = self._transition(
+                command,
+                "approved",
+                actor=actor.strip(),
+                occurred_at=operation_at,
+            )
             approved = replace(approved, approved_by=actor.strip())
             self._repository.replace(approved)
             return approved
@@ -215,11 +221,21 @@ class CommandService:
             self._repository.replace(simulated)
             return simulated
 
-    def _expire_if_needed(self, command: SimulatedCommand) -> SimulatedCommand:
-        if command.expires_at > self._timestamp():
+    def _expire_if_needed(
+        self,
+        command: SimulatedCommand,
+        occurred_at: datetime | None = None,
+    ) -> SimulatedCommand:
+        occurred_at = occurred_at or self._timestamp()
+        if command.expires_at > occurred_at:
             return command
         if command.state != "expired" and command.state not in TERMINAL_STATES:
-            command = self._transition(command, "expired", reason="command expired")
+            command = self._transition(
+                command,
+                "expired",
+                reason="command expired",
+                occurred_at=occurred_at,
+            )
             self._repository.replace(command)
         raise CommandPolicyError("command expired")
 
@@ -230,10 +246,11 @@ class CommandService:
         *,
         actor: str | None = None,
         reason: str | None = None,
+        occurred_at: datetime | None = None,
     ) -> SimulatedCommand:
         event = CommandAuditEvent(
             event_type=f"command.{state}",
-            occurred_at=self._timestamp(),
+            occurred_at=occurred_at or self._timestamp(),
             correlation_id=command.correlation_id,
             from_state=None if not command.audit_events else command.state,
             to_state=state,
