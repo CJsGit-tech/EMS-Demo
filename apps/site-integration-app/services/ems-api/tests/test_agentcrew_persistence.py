@@ -20,6 +20,51 @@ def test_required_persistence_mode_surfaces_an_unavailable_database():
     assert error.value.code == AgentCrewErrorCode.PERSISTENCE_UNAVAILABLE
 
 
+def test_failed_required_run_checkpoint_returns_terminal_failure_without_another_write():
+    from agentcrew.contracts import ActiveSiteContext, AgentRunStatus
+    from agentcrew.service import AgentCrewService
+
+    class FailingCheckpointPersistence:
+        enabled = True
+
+        def __init__(self):
+            self.calls: list[str] = []
+            self.checkpoint_failed = False
+
+        def save_session(self, *_args):
+            self.calls.append("save_session")
+
+        def save_message(self, *_args):
+            self.calls.append("save_message")
+            if self.checkpoint_failed:
+                raise RuntimeError("all writes fail after the checkpoint failure")
+
+        def save_mcp_attempt(self, *_args):
+            self.calls.append("save_mcp_attempt")
+
+        def load_memory_context(self, *_args):
+            return None
+
+        def save_run(self, *_args):
+            self.calls.append("save_run")
+            self.checkpoint_failed = True
+            raise RuntimeError("required run checkpoint unavailable")
+
+    persistence = FailingCheckpointPersistence()
+    service = AgentCrewService(provider=False)
+    service.persistence = persistence
+    context = ActiveSiteContext("site-001", "Verde North", "demo-user", "site/site-001/overview")
+
+    result = service.start(context, "Show device health", "checkpoint-failure")
+
+    assert result["status"] == AgentRunStatus.FAILED.value
+    assert result["result"] == {
+        "code": "persistence_unavailable",
+        "message": "The run could not be durably saved; no durable success was reported.",
+    }
+    assert persistence.calls == ["save_session", "save_message", "save_mcp_attempt", "save_run"]
+
+
 @pytest.mark.skipif(os.getenv("EMS_LIVE_DB") != "1", reason="requires the isolated local PostgreSQL profile")
 def test_report_draft_persists_in_public_agentcrew_schema():
     from agentcrew.contracts import ActiveSiteContext, ApprovalMode

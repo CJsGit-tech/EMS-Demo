@@ -16,6 +16,7 @@ def test_authoritative_mcp_attempts_and_runs_survive_a_service_restart():
     from agentcrew.mcp import AuthoritativeMcpGateway
     from agentcrew.runtime import ToolRequest
     from agentcrew.service import AgentCrewService
+    from ems.repositories import EmsRepository, InMemoryEmsRepository
 
     suffix = uuid4().hex[:12]
     session_id = f"task2-session-{suffix}"
@@ -23,9 +24,15 @@ def test_authoritative_mcp_attempts_and_runs_survive_a_service_restart():
     context = ActiveSiteContext("site-001", "Verde North", "demo-user", "site/site-001/overview")
     service = AgentCrewService(provider=False)
     assert isinstance(service.gateway, AuthoritativeMcpGateway)
-    service.approvals.add((session_id, "get_metric_catalog"))
+    assert isinstance(service.gateway.adapter.service.repository, EmsRepository)
+    assert not isinstance(service.gateway.adapter.service.repository, InMemoryEmsRepository)
+    service.approvals.add((session_id, "query_energy_timeseries"))
 
-    result = service.call_tool(ToolRequest(run_id, session_id, context, "get_metric_catalog", {"site_id": "site-001"}))
+    result = service.call_tool(ToolRequest(run_id, session_id, context, "query_energy_timeseries", {
+        "site_id": "site-001",
+        "metric_codes": ["energy_kwh"],
+        "limit": 2,
+    }))
     started = service.start(context, "Show device health", session_id)
     recovered = AgentCrewService(provider=False).snapshot(started["runId"], context, session_id)
 
@@ -43,6 +50,28 @@ def test_authoritative_mcp_attempts_and_runs_survive_a_service_restart():
 
     outcome, audit_types = asyncio.run(read_and_cleanup())
     assert result.outcome == "success"
+    assert result.records == (
+        {
+            "site_id": "site-001",
+            "asset_id": "inv-001",
+            "channel_id": "energy_kwh",
+            "timestamp": "2025-07-23T08:00:00+00:00",
+            "metric": "energy_kwh",
+            "value": 812.0,
+            "unit": "kWh",
+            "quality": {"state": "valid", "score": 1.0},
+        },
+        {
+            "site_id": "site-001",
+            "asset_id": "inv-001",
+            "channel_id": "energy_kwh",
+            "timestamp": "2025-07-24T08:00:00+00:00",
+            "metric": "energy_kwh",
+            "value": 839.99,
+            "unit": "kWh",
+            "quality": {"state": "valid", "score": 1.0},
+        },
+    )
     assert outcome == "success"
     assert {"mcp_tool_requested", "mcp_tool_attempted", "mcp_tool_responded"}.issubset(audit_types)
     assert recovered["runId"] == started["runId"]

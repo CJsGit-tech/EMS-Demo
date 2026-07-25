@@ -456,6 +456,7 @@ class AgentCrewService:
             self._persist_pending_audits()
         except Exception:
             run: AgentCrewRun = state["run"]
+            state["persistence_failed"] = True
             state["result"] = {
                 "code": "persistence_unavailable",
                 "message": "The run could not be durably saved; no durable success was reported.",
@@ -496,7 +497,7 @@ class AgentCrewService:
 
     def _append_completion_message(self, run_id: str) -> None:
         state = self.runs.get(run_id)
-        if not state or state.get("assistant_message_saved") or state.get("result") is None:
+        if not state or state.get("persistence_failed") or state.get("assistant_message_saved") or state.get("result") is None:
             return
         run = state["run"]
         message = self.memory.append_message(state["session_id"], run.site_context.site_id, run.site_context.user_id, "assistant", run.message or "Run completed.", run_id)
