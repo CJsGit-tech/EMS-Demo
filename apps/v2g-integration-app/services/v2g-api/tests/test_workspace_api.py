@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from v2g.app import app, get_work_order_service, get_workspace_read_model
+from v2g.contracts import InverterResponse
 from v2g.repository import V2GRepository
 from v2g.seed import seed_demo_fleet
 from v2g.workspace import WorkOrderService, WorkspaceReadModel
@@ -12,6 +14,24 @@ from v2g.workspace import WorkOrderService, WorkspaceReadModel
 
 START = datetime(2026, 7, 24, tzinfo=UTC).isoformat()
 END = datetime(2026, 7, 26, tzinfo=UTC).isoformat()
+
+
+def test_workspace_contracts_reject_scalar_coercion_and_extra_fields():
+    payload = {
+        "asset_id": "inv-01",
+        "ac_power_kw": 18.2,
+        "dc_power_kw": 19.1,
+        "temperature_c": 42.0,
+        "efficiency_percent": 95.3,
+        "communication_state": "good",
+        "alarm_count": 0,
+        "observed_at": datetime(2026, 7, 25, tzinfo=UTC),
+    }
+
+    with pytest.raises(ValidationError):
+        InverterResponse.model_validate({**payload, "ac_power_kw": "18.2"})
+    with pytest.raises(ValidationError):
+        InverterResponse.model_validate({**payload, "undeclared": True})
 
 
 @pytest.fixture

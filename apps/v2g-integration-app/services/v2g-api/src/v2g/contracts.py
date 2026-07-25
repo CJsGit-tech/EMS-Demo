@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
 from v2g.commands import CommandRequest, SimulatedCommand
 from v2g.dispatch import SiteState, build_recommendation
@@ -28,11 +28,31 @@ AlarmState = Literal["open", "cleared"]
 class ContractModel(BaseModel):
     """Reject undeclared input fields and non-finite JSON numbers at the boundary."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        allow_inf_nan=False,
+        strict=True,
+    )
 
 
 NonEmptyText = Annotated[str, Field(min_length=1, max_length=256)]
 Identifier = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+def _parse_iso_timestamp(value: object) -> datetime:
+    """Accept the API's ISO-8601 JSON wire format without scalar coercion."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        raise ValueError("timestamp must be an ISO-8601 string")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("timestamp must be an ISO-8601 string") from error
+
+
+JsonTimestamp = Annotated[datetime, BeforeValidator(_parse_iso_timestamp)]
 
 
 class DataFreshness(ContractModel):
@@ -307,7 +327,7 @@ class CommandCreateRequest(ContractModel):
     site_id: Identifier
     power_kw: float
     projected_soc_percent: float
-    expires_at: datetime
+    expires_at: JsonTimestamp
     correlation_id: Identifier
     idempotency_key: Identifier
 
