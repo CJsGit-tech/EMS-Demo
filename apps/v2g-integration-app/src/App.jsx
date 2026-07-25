@@ -2,26 +2,32 @@ import { useContext, useEffect, useState } from "react";
 
 import { v2gApi } from "./api/client.js";
 import { LanguageSwitcher } from "./components/LanguageSwitcher.jsx";
-import { AlarmPage } from "./features/alarms/AlarmPage.jsx";
+import { ScadaSidebar } from "./components/ScadaSidebar.jsx";
 import { DispatchPage } from "./features/dispatch/DispatchPage.jsx";
-import { FleetPage } from "./features/fleet/FleetPage.jsx";
 import { HistorianPage, historianIsStale } from "./features/historian/HistorianPage.jsx";
-import { OperationsPage } from "./features/operations/OperationsPage.jsx";
+import { EventManagementPage } from "./features/monitoring/EventManagementPage.jsx";
+import { InverterMonitoringPage } from "./features/monitoring/InverterMonitoringPage.jsx";
+import { LiveMonitoringPage } from "./features/monitoring/LiveMonitoringPage.jsx";
+import { DiagnosticsPage } from "./features/overview/DiagnosticsPage.jsx";
+import { FleetOverviewPage } from "./features/overview/FleetOverviewPage.jsx";
+import { SiteOverviewPage } from "./features/overview/SiteOverviewPage.jsx";
 import { I18nContext, I18nProvider, useI18n } from "./i18n/I18nProvider.jsx";
 import "./styles.css";
-
-const navigationGroups = [
-  { labelKey: "nav.overview", icon: "⌂", items: [{ labelKey: "nav.siteDashboard", tab: "Operations" }] },
-  { labelKey: "nav.monitoring", icon: "◉", items: [{ labelKey: "nav.evseFleet", tab: "Fleet" }, { labelKey: "nav.activeAlarms", tab: "Alarms" }] },
-  { labelKey: "nav.operations", icon: "↯", items: [{ labelKey: "nav.dispatchSupervisor", tab: "Dispatch" }] },
-  { labelKey: "nav.analytics", icon: "⌁", items: [{ labelKey: "nav.powerHistorian", tab: "Historian" }] },
-  { labelKey: "nav.reports", icon: "▤", items: [{ labelKey: "nav.shiftReport", planned: true }, { labelKey: "nav.auditExport", planned: true }] },
-];
 
 function historianWindow(rangeHours) {
   const to = new Date();
   const from = new Date(to.valueOf() - rangeHours * 60 * 60 * 1000);
   return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function resourceState(view, data) {
+  const points = data?.historian?.points ?? data?.points ?? [];
+  const stale = data?.overview?.data_freshness?.quality === "stale" || data?.data_freshness?.quality === "stale" || historianIsStale(data?.historian ?? data) || data?.assets?.some((asset) => asset.freshness === "stale");
+  if (stale) return "stale";
+  const collection = view === "diagnostics" ? data?.assets : view === "events" ? data?.events : view === "inverters" ? data?.inverters : null;
+  if (Array.isArray(collection) && collection.length === 0) return "empty";
+  if (view === "historian" && points.length === 0) return "empty";
+  return "ready";
 }
 
 export default function App() {
@@ -31,69 +37,54 @@ export default function App() {
 
 function AppShell() {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState("Operations");
+  const [activeView, setActiveView] = useState("siteOverview");
   const [rangeHours, setRangeHours] = useState(24);
   const [resource, setResource] = useState({ state: "loading", data: null, error: null });
 
   useEffect(() => {
     let active = true;
-    const loaders = {
-      Operations: async () => {
-        const window = historianWindow(rangeHours);
-        const [overview, fleet, alarms, recommendations, historian] = await Promise.all([
-          v2gApi.getOverview(),
-          v2gApi.getFleet(),
-          v2gApi.getAlarms(),
-          v2gApi.getRecommendations(),
-          v2gApi.getHistorian(window),
-        ]);
+    const load = async () => {
+      const window = historianWindow(rangeHours);
+      if (activeView === "siteOverview") {
+        const [overview, fleet, alarms, recommendations, historian] = await Promise.all([v2gApi.getOverview(), v2gApi.getFleet(), v2gApi.getAlarms(), v2gApi.getRecommendations(), v2gApi.getHistorian(window)]);
         return { overview, fleet, alarms, recommendations, historian };
-      },
-      Fleet: v2gApi.getFleet,
-      Dispatch: v2gApi.getRecommendations,
-      Alarms: v2gApi.getAlarms,
-      Historian: () => v2gApi.getHistorian(historianWindow(rangeHours)),
+      }
+      if (activeView === "fleetOverview") return v2gApi.getFleet();
+      if (activeView === "diagnostics") return v2gApi.getDiagnostics();
+      if (activeView === "events") return v2gApi.getEvents();
+      if (activeView === "liveMonitoring") {
+        const [overview, fleet, historian] = await Promise.all([v2gApi.getOverview(), v2gApi.getFleet(), v2gApi.getHistorian(window)]);
+        return { overview, fleet, historian };
+      }
+      if (activeView === "inverters") {
+        const snapshot = await v2gApi.getInverters();
+        const trends = Object.fromEntries(await Promise.all((snapshot.inverters ?? []).map(async (inverter) => [inverter.asset_id, await v2gApi.getInverterTrend(inverter.asset_id, window)])));
+        return { ...snapshot, trends };
+      }
+      if (activeView === "dispatch") return { recommendations: await v2gApi.getRecommendations() };
+      return v2gApi.getHistorian(window);
     };
     setResource({ state: "loading", data: null, error: null });
-    loaders[activeTab]().then((data) => {
-      if (!active) return;
-      const stale = (activeTab === "Operations" && (data.overview?.data_freshness?.quality === "stale" || historianIsStale(data.historian)))
-        || (activeTab === "Historian" && historianIsStale(data));
-      const isEmpty = (data.alarms && data.alarms.length === 0) || (data.recommendations && data.recommendations.length === 0) || (data.points && data.points.length === 0);
-      setResource({ state: stale ? "stale" : isEmpty ? "empty" : "ready", data, error: null });
+    load().then((data) => {
+      if (active) setResource({ state: resourceState(activeView, data), data, error: null });
     }).catch((failure) => {
       if (active) setResource({ state: "error", data: null, error: failure.message });
     });
     return () => { active = false; };
-  }, [activeTab, rangeHours]);
+  }, [activeView, rangeHours]);
 
-  const recordApproval = (commandId, reason) => v2gApi.approveCommand(commandId, { actor: "local-scada-operator", reason });
-  const recordRejection = (commandId, reason) => v2gApi.rejectCommand(commandId, { actor: "local-scada-operator", reason });
-  const updateDispatchCommand = (command) => {
-    if (!command?.command_id || !command?.state) return;
-    setResource((current) => {
-      const recommendations = current.data?.recommendations;
-      if (!Array.isArray(recommendations)) return current;
-      return {
-        ...current,
-        data: {
-          ...current.data,
-          recommendations: recommendations.map((recommendation) => (
-            recommendation.command_id === command.command_id
-              ? { ...recommendation, state: command.state }
-              : recommendation
-          )),
-        },
-      };
-    });
-  };
   const { data, state, error } = resource;
+  const headings = { siteOverview: "page.siteOverview", fleetOverview: "page.fleetOverview", diagnostics: "page.diagnostics", events: "page.events", liveMonitoring: "page.liveMonitoring", inverters: "page.inverters", dispatch: "nav.dispatchSupervisor", historian: "nav.powerHistorian" };
+  const alarmCount = data?.alarms?.alarms?.filter((alarm) => alarm.state !== "cleared").length ?? 0;
   let page;
-  if (activeTab === "Operations") page = <OperationsPage overview={data?.overview} fleet={data?.fleet} alarms={data?.alarms} recommendations={data?.recommendations} historian={data?.historian} state={state} error={error} />;
-  if (activeTab === "Fleet") page = <FleetPage fleet={data} state={state} error={error} />;
-  if (activeTab === "Dispatch") page = <DispatchPage recommendations={data?.recommendations} state={state} error={error} onApprove={recordApproval} onReject={recordRejection} onCommandResolved={updateDispatchCommand} />;
-  if (activeTab === "Alarms") page = <AlarmPage alarms={data} state={state} error={error} />;
-  if (activeTab === "Historian") page = <HistorianPage historian={data} state={state} error={error} rangeHours={rangeHours} onRangeChange={setRangeHours} />;
+  if (activeView === "siteOverview") page = <SiteOverviewPage data={data} state={state} error={error} />;
+  if (activeView === "fleetOverview") page = <FleetOverviewPage data={data} state={state} error={error} />;
+  if (activeView === "diagnostics") page = <DiagnosticsPage data={data} state={state} error={error} />;
+  if (activeView === "events") page = <EventManagementPage data={data} state={state} error={error} />;
+  if (activeView === "liveMonitoring") page = <LiveMonitoringPage data={data} state={state} error={error} />;
+  if (activeView === "inverters") page = <InverterMonitoringPage data={data} state={state} error={error} />;
+  if (activeView === "dispatch") page = <DispatchPage recommendations={data?.recommendations} state={state} error={error} />;
+  if (activeView === "historian") page = <HistorianPage historian={data} state={state} error={error} rangeHours={rangeHours} onRangeChange={setRangeHours} />;
 
-  return <main className="scada-shell" aria-label={t("app.label")}><aside className="scada-sidebar"><div className="scada-sidebar__brand"><span aria-hidden="true">◈</span><div><p>V2G SCADA</p><small>{t("brand.simulator")}</small></div></div><nav className="scada-nav" aria-label={t("navigation.label")}>{navigationGroups.map((group) => <section className="scada-nav-group" key={group.labelKey}><p className="scada-nav-group__label"><span aria-hidden="true">{group.icon}</span>{t(group.labelKey)}</p><div>{group.items.map((item) => item.planned ? <span className="scada-nav-item scada-nav-item--planned" key={item.labelKey}>{t(item.labelKey)}<small>{t("nav.planned")}</small></span> : <button className="scada-nav-item" type="button" key={item.tab} aria-current={activeTab === item.tab ? "page" : undefined} onClick={() => setActiveTab(item.tab)}>{t(item.labelKey)}</button>)}</div></section>)}</nav><p className="scada-sidebar__boundary">{t("boundary.simulatorOnly")}<br />{t("boundary.noExternalControl")}</p></aside><section className="scada-app"><header className="scada-app__header"><div><p className="scada-eyebrow">{t("header.eyebrow", { site: "demo-v2g-site" })}</p><h1>{t("header.siteOverview")}</h1></div><div><p className="scada-app__boundary">{t("header.liveSimulator")}</p><LanguageSwitcher /></div></header><div id={`panel-${activeTab.toLowerCase()}`} aria-live="polite">{page}</div></section></main>;
+  return <main className="scada-shell" aria-label={t("app.label")}><ScadaSidebar activeView={activeView} onSelect={setActiveView} alarmCount={alarmCount} /><section className="scada-app"><header className="scada-app__header"><div><p className="scada-eyebrow">{t("header.eyebrow", { site: "demo-v2g-site" })}</p><h1>{t(headings[activeView])}</h1></div><div><p className="scada-app__boundary">{t("header.liveSimulator")}</p><LanguageSwitcher /></div></header><div id={`panel-${activeView}`} aria-live="polite">{page}</div></section></main>;
 }

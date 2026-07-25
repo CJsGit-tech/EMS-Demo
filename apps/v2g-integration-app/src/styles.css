@@ -590,3 +590,109 @@ td:last-child,
     scroll-behavior: auto !important;
   }
 }
+
+/* Task 4 localized overview and monitoring workspaces. */
+.scada-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.scada-workspace-grid--metrics {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.scada-workspace-value {
+  display: block;
+  color: #f0fbfd;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  letter-spacing: -0.055em;
+}
+
+.scada-workspace-list,
+.scada-workspace-tiles {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.scada-workspace-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.scada-workspace-list > span,
+.scada-workspace-row,
+.scada-workspace-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-height: 2.8rem;
+  padding: 0.65rem 0.7rem;
+  color: #d7e6ec;
+  border: 1px solid #29434c;
+  background: #0b171d;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.scada-workspace-list small,
+.scada-workspace-row small,
+.scada-workspace-tile small {
+  color: #85a7b0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+}
+
+.scada-workspace-row,
+.scada-workspace-tile {
+  width: 100%;
+  cursor: pointer;
+}
+
+.scada-workspace-row[aria-pressed="true"],
+.scada-workspace-tile[aria-pressed="true"] {
+  color: #f0fbfd;
+  border-color: #60d7e6;
+  background: #14324a;
+}
+
+.scada-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #29434c;
+  background: #0d1a20;
+}
+
+.scada-filter-bar label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 9rem;
+  color: #85a7b0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.scada-filter-bar select {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.55rem;
+  color: #f0fbfd;
+  border: 1px solid #42616a;
+  border-radius: 0;
+  background: #081116;
+  font: inherit;
+  letter-spacing: normal;
+}
+
+@media (max-width: 48rem) {
+  .scada-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scada-filter-bar label {
+    flex: 1 1 100%;
+  }
+}

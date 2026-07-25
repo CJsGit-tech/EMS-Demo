@@ -1,0 +1,14 @@
+import { PageState, SimulatorNote, Trend } from "../../components/PageState.jsx";
+import { useI18n } from "../../i18n/I18nProvider.jsx";
+
+export function SiteOverviewPage({ data, state = "loading", error }) {
+  const { t } = useI18n();
+  const overview = data?.overview;
+  if (!overview || ["loading", "error", "empty"].includes(state)) return <PageState state={state} error={error} />;
+  const evses = data?.fleet?.evses ?? [];
+  const alarms = (data?.alarms?.alarms ?? []).filter((alarm) => alarm.state !== "cleared");
+  const advice = data?.recommendations?.recommendations?.[0];
+  const points = (data?.historian?.points ?? []).map((point) => ({ value: point.value }));
+
+  return <section className="scada-page" aria-labelledby="site-overview-title"><header className="scada-page__header"><div><p className="scada-eyebrow">{overview.site_id}</p><h2 id="site-overview-title">{t("page.siteOverview")}</h2></div><SimulatorNote /></header><PageState state={state} error={error} /><section className="scada-workspace-grid scada-workspace-grid--metrics"><article className="scada-panel"><p className="scada-eyebrow">{t("metric.sitePower")}</p><strong className="scada-workspace-value">{overview.site_power_kw} kW</strong><SimulatorNote /></article><article className="scada-panel"><p className="scada-eyebrow">{t("metric.flexibleCapacity")}</p><strong className="scada-workspace-value">{overview.available_flexible_kw} kW</strong><SimulatorNote calculation /></article><article className="scada-panel"><p className="scada-eyebrow">{t("metric.availableFleet")}</p><strong className="scada-workspace-value">{evses.length}</strong><SimulatorNote calculation /></article><article className="scada-panel"><p className="scada-eyebrow">{t("metric.openAlarms")}</p><strong className="scada-workspace-value">{alarms.length}</strong><SimulatorNote /></article></section><section className="scada-workspace-grid"><Trend title={t("trend.sitePower")} points={points} /><article className="scada-panel"><p className="scada-eyebrow">{t("panel.fleetMatrix")}</p><div className="scada-workspace-list">{evses.map((evse) => <span key={evse.asset_id}>{evse.display_name ?? evse.asset_id}<small>{evse.state}</small></span>)}</div><SimulatorNote /></article></section><section className="scada-workspace-grid"><article className="scada-panel"><p className="scada-eyebrow">{t("panel.dispatchPosture")}</p><strong>{advice?.expected_site_impact_kw ?? "—"}{advice ? " kW" : ""}</strong><p className="scada-muted">{advice?.state ?? advice?.status ?? t("state.empty")}</p><SimulatorNote calculation /></article><article className="scada-panel"><p className="scada-eyebrow">{t("panel.attentionRail")}</p><div className="scada-workspace-list">{alarms.length ? alarms.slice(0, 3).map((alarm) => <span key={`${alarm.asset_id}-${alarm.code}`}>{alarm.code}<small>{alarm.severity}</small></span>) : <p className="scada-empty">{t("state.empty")}</p>}</div><SimulatorNote /></article></section></section>;
+}

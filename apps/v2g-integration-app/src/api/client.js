@@ -36,6 +36,12 @@ export const v2gApi = {
   getFleet: () => request(`/api/v1/sites/${SITE_ID}/fleet`),
   getAlarms: () => request(`/api/v1/sites/${SITE_ID}/alarms`),
   getRecommendations: () => request(`/api/v1/sites/${SITE_ID}/recommendations`),
+  getDiagnostics: () => request(`/api/v1/sites/${SITE_ID}/diagnostics`),
+  getInverters: () => request(`/api/v1/sites/${SITE_ID}/inverters`),
+  getInverterTrend: (assetId, { from, to, metric = "ac_power_kw" }) => request(`/api/v1/sites/${SITE_ID}/inverters/${assetId}/trend`, {
+    query: { from, to, metric },
+  }),
+  getEvents: (filters = {}) => request(`/api/v1/sites/${SITE_ID}/events`, { query: filters }),
   getHistorian: ({ from, to, metric = "power_kw" }) => request(`/api/v1/sites/${SITE_ID}/historian`, {
     query: { from, to, metric },
   }),
