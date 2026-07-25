@@ -20,6 +20,7 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
   const dialogRef = useRef(null);
   const [reason, setReason] = useState("");
   const titleId = useId();
+  const descriptionId = useId();
   const reasonId = useId();
 
   useEffect(() => {
@@ -66,10 +67,11 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
   };
 
   return (
-    <dialog ref={dialogRef} className="scada-dialog" aria-labelledby={titleId}>
+    <dialog ref={dialogRef} className="scada-dialog" aria-labelledby={titleId} aria-describedby={descriptionId}>
       <form className="scada-dialog__form" aria-label="Simulated command approval">
         <p className="scada-eyebrow">Simulator-only recommendation</p>
-        <h2 id={titleId}>Review simulated command</h2>
+        <h2 id={titleId}>Approve simulated command</h2>
+        <p className="scada-dialog__intro" id={descriptionId}>This records a human decision in the local simulator only. It does not contact equipment, vehicles, or the grid.</p>
         <dl className="scada-dialog__values">
           <div>
             <dt>Expires at</dt>
@@ -77,17 +79,17 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
           </div>
           <div>
             <dt>Projected SOC</dt>
-            <dd>{recommendation.projectedSoc}%</dd>
+            <dd>{recommendation.projectedSoc}{typeof recommendation.projectedSoc === "number" ? "%" : ""}</dd>
           </div>
           <div>
             <dt>Impact</dt>
-            <dd>{recommendation.impactKw} kW</dd>
+            <dd>{recommendation.impactKw}{typeof recommendation.impactKw === "number" ? " kW" : ""}</dd>
           </div>
         </dl>
         <section aria-label="Simulated command constraints">
           <h3>Constraints</h3>
           <ul className="scada-constraints">
-            {recommendation.constraints.map((constraint) => (
+            {(recommendation.constraints ?? []).map((constraint) => (
               <li key={constraint}>{constraint}</li>
             ))}
           </ul>
