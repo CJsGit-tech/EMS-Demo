@@ -4,9 +4,11 @@ version = "0.0.0"
 description = "Simulator-only V2G SCADA API"
 requires-python = ">=3.11"
 dependencies = [
+  "alembic>=1.13,<2.0",
   "fastapi>=0.115,<1.0",
   "pytest>=8.0,<9.0",
   "httpx>=0.27,<1.0",
+  "SQLAlchemy>=2.0,<3.0",
 ]
 
 [tool.pytest.ini_options]
