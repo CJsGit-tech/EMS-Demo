@@ -1,49 +1,57 @@
-# Task 1 — Standalone V2G SCADA scaffold report
+# Task 1 Report: GPT-5-mini AgentCrew Copilot backend supervisor and SSE contract
 
-## Scope delivered
+## Status
 
-- Created an independent React/Vite shell in `apps/v2g-integration-app`.
-- Created a simulator-only FastAPI service in `apps/v2g-integration-app/services/v2g-api`.
-- Added `GET /healthz`, which returns exactly `{"status":"ok"}`.
-- Added smoke tests for the labelled `main` landmark and the health endpoint.
-- Added `index.html` as the Vite entry document required for the requested production build and runnable shell.
+DONE_WITH_CONCERNS
 
-## Isolation and safety review
+## Implementation
 
-- No runtime import, dependency, or file reference points to `apps/site-integration-app`.
-- The API exposes only the read-only health endpoint; it contains no physical-device, external-control, database, or write path.
-- No database is configured in this scaffold, so the V2G API remains the only potential future database writer by construction.
-- Existing untracked `README.md`, `AGENTS.md`, and `agency/` content under the V2G app was preserved and excluded from the task commit.
+- Added `agentcrew.supervisor.GPTSupervisor` with a typed, ordered public SSE envelope. Event types cover run start/completion/failure, specialist delegation, assistant deltas, tool calls, and OpenAI web-search start/completion.
+- Added `POST /api/v1/agentcrew/runs/stream` as `text/event-stream`; the existing synchronous run endpoint remains unchanged as the compatibility path.
+- Added `GET /api/v1/agentcrew/provider` with a safe provider mode/model/readiness status.
+- Extended `OpenAIProvider` with a Responses API streaming method that uses the configured `gpt-5-mini` model, `store=False`, hashed safety identifier, hosted `web_search`, and source inclusion.
+- Reused the established specialist roles, site-context validation, preference-policy compiler, and redaction boundary. Recalled preferences are injected only as bounded presentation policy.
+- Preserved deterministic fixtures as an explicit stream mode, labelled in both start and terminal events.
+- Added focused tests for ordered deltas/tool/web-search events, provider terminal errors, deterministic mode, SSE serialization, selected model and web-search request configuration, provider status, and the FastAPI stream response.
 
-## Role prompts consulted
+## TDD evidence
 
-- `agency/agents/backend-architect.toml`: used to preserve service isolation and avoid unnecessary external, persistence, or control integrations in this foundational API.
-- `agency/agents/frontend-developer.toml`: used to provide a semantic, screen-reader-labelled React landmark and an accessibility-focused smoke test.
+1. Added `tests/test_gpt_supervisor.py` before implementing `agentcrew.supervisor`.
+2. Ran `.venv/bin/python -m pytest -q tests/test_gpt_supervisor.py`; it failed during collection with the expected `ModuleNotFoundError: No module named 'agentcrew.supervisor'`.
+3. Implemented the typed supervisor and reran the focused supervisor suite: `4 passed in 0.01s`.
+4. Added provider and FastAPI stream tests before adding `OpenAIProvider.stream`, the provider-status route, and the SSE route.
+5. Ran `.venv/bin/python -m pytest -q tests/test_openai_provider.py tests/test_fastapi_app.py`; it failed as expected because `OpenAIProvider` had no `stream` method and `agentcrew.app` had no `supervisor`.
+6. Implemented the minimal provider and endpoint integration. The first green run exposed one overly-specific terminal JSON assertion in the new test; corrected that assertion to validate the envelope type rather than its JSON field order.
 
-## Test-first evidence
+## Exact verification
 
-1. Added frontend and backend smoke tests before application modules.
-2. Confirmed failures due to missing modules: `../src/App.jsx` and `v2g`.
-3. Added the minimal application modules and Vite entry document.
-4. Corrected Vitest configuration to enable the global `test` and `expect` form specified by the required frontend test.
-
-## Verification
-
-Executed from `apps/v2g-integration-app`:
+Commands were run from `apps/site-integration-app/services/ems-api`.
 
 ```text
-npm test -- --run tests/app.test.jsx && npm run build && pytest services/v2g-api/tests/test_health.py -q
+.venv/bin/python -m pytest -q tests/test_gpt_supervisor.py tests/test_openai_provider.py tests/test_fastapi_app.py
+................                                                         [100%]
+16 passed, 1 warning in 0.15s
 ```
 
-Result: frontend smoke test passed (1/1), Vite production build completed, and backend health test passed (1/1).
+```text
+.venv/bin/python -m pytest -q
+.ss..............s.sss...............................................    [100%]
+63 passed, 6 skipped, 1 warning in 0.44s
+```
 
-## Self-review
+```text
+.venv/bin/python -m compileall -q src tests
+exit 0
+```
 
-- Requirements coverage: all listed Task 1 files are present; the additional `index.html` is necessary for the requested Vite build.
-- API contract: `GET /healthz` returns the exact required JSON object.
-- UI contract: `App` renders `<main aria-label="V2G SCADA">`.
-- Scope: no dependencies on the existing site integration app; no control, network-client, or persistence code was added.
+The only test warning is a pre-existing FastAPI/Starlette `TestClient` deprecation warning concerning its `httpx` dependency.
 
-## Concern
+## Commits
 
-`npm install` reported five dependency-audit findings (three moderate, one high, one critical) in the newly resolved frontend development dependency tree. Remediation is intentionally deferred because `npm audit fix --force` would change dependency versions outside this narrowly scoped scaffold task.
+- Implementation commit: `79baa7b` (`feat(agentcrew): add GPT streaming supervisor`).
+- Report commit: recorded after this report is staged.
+
+## Concerns
+
+- The designated backend directory was already entirely untracked in the shared worktree. To avoid claiming or staging unrelated backend work, the implementation commit stages only the four Task 1 source/test paths. It therefore relies on the existing untracked AgentCrew foundation remaining present until the owning integration changes are committed.
+- Task 2 remains responsible for replacing the fixture-backed stream tool indication with the authoritative database-backed EMS MCP execution and durable persistence of streamed artifacts.
