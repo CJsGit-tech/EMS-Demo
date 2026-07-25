@@ -74,6 +74,34 @@ class NestedFailureProvider:
         )
 
 
+class CorrelatedWebSearchLifecycleProvider:
+    """A single Responses web search reported by both completion event forms."""
+
+    model = "gpt-5-mini"
+
+    def stream(self, *args, **kwargs):
+        yield {"type": "response.web_search_call.in_progress", "item_id": "ws-correlated"}
+        yield {"type": "response.web_search_call.searching", "item_id": "ws-correlated"}
+        yield {
+            "type": "response.web_search_call.completed",
+            "item_id": "ws-correlated",
+            "queries": ["preliminary query"],
+            "sources": [{"url": "https://example.test/preliminary", "title": "Preliminary"}],
+        }
+        yield {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "web_search_call",
+                "id": "ws-correlated",
+                "action": {
+                    "queries": ["final grid forecast", "final Taipei weather"],
+                    "sources": [{"url": "https://example.test/final", "title": "Final results"}],
+                },
+            },
+        }
+        yield {"type": "response.completed"}
+
+
 def test_supervisor_orders_delegation_deltas_tools_web_search_and_terminal_event():
     supervisor = GPTSupervisor(
         provider=FakeProvider(),
@@ -126,6 +154,23 @@ def test_supervisor_translates_responses_web_search_lifecycle_queries_and_dedupl
         "callId": "fc-1",
         "name": "query_energy_timeseries",
         "arguments": {"site_id": "site-001"},
+    }
+
+
+def test_supervisor_correlates_web_search_completed_with_its_final_output_item():
+    events = list(GPTSupervisor(provider=CorrelatedWebSearchLifecycleProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+    assert [event.type for event in events] == [
+        SupervisorEventType.RUN_STARTED,
+        SupervisorEventType.SPECIALIST_DELEGATED,
+        SupervisorEventType.WEB_SEARCH_STARTED,
+        SupervisorEventType.WEB_SEARCH_COMPLETED,
+        SupervisorEventType.RUN_COMPLETED,
+    ]
+    assert events[3].data == {
+        "id": "ws-correlated",
+        "queries": ["final grid forecast", "final Taipei weather"],
+        "sources": [{"url": "https://example.test/final", "title": "Final results"}],
     }
 
 

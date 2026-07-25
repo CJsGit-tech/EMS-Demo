@@ -138,11 +138,15 @@ class GPTSupervisor:
             completed = False
             emitted_function_call_ids: set[str] = set()
             started_web_search_ids: set[str] = set()
+            completed_web_search_ids: set[str] = set()
+            pending_web_search_completions: dict[str, Any] = {}
             for raw_event in self.provider.stream(hat, context, user_message, evidence):
                 for event_type, data in _translate_response_event(
                     raw_event,
                     emitted_function_call_ids=emitted_function_call_ids,
                     started_web_search_ids=started_web_search_ids,
+                    completed_web_search_ids=completed_web_search_ids,
+                    pending_web_search_completions=pending_web_search_completions,
                 ):
                     if event_type == SupervisorEventType.RUN_COMPLETED:
                         completed = True
@@ -165,9 +169,13 @@ def _translate_response_event(
     *,
     emitted_function_call_ids: set[str] | None = None,
     started_web_search_ids: set[str] | None = None,
+    completed_web_search_ids: set[str] | None = None,
+    pending_web_search_completions: dict[str, Any] | None = None,
 ) -> list[tuple[SupervisorEventType, dict[str, Any]]]:
     emitted_function_call_ids = emitted_function_call_ids if emitted_function_call_ids is not None else set()
     started_web_search_ids = started_web_search_ids if started_web_search_ids is not None else set()
+    completed_web_search_ids = completed_web_search_ids if completed_web_search_ids is not None else set()
+    pending_web_search_completions = pending_web_search_completions if pending_web_search_completions is not None else {}
     event_type = _field(raw_event, "type")
     if event_type == "response.output_text.delta":
         delta = _field(raw_event, "delta")
@@ -179,7 +187,10 @@ def _translate_response_event(
         started_web_search_ids.add(web_search_id)
         return [(SupervisorEventType.WEB_SEARCH_STARTED, {"id": web_search_id})]
     if event_type == "response.web_search_call.completed":
-        return [(SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(raw_event))]
+        web_search_id = _item_id(raw_event)
+        if web_search_id not in completed_web_search_ids:
+            pending_web_search_completions[web_search_id] = raw_event
+        return []
     if event_type == "response.output_item.added":
         item = _field(raw_event, "item")
         if _field(item, "type") == "web_search_call":
@@ -191,7 +202,12 @@ def _translate_response_event(
     if event_type == "response.output_item.done":
         item = _field(raw_event, "item")
         if _field(item, "type") == "web_search_call":
-            return [(SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(raw_event, item))]
+            web_search_id = _item_id(item)
+            if web_search_id in completed_web_search_ids:
+                return []
+            completed_web_search_ids.add(web_search_id)
+            completion_event = pending_web_search_completions.pop(web_search_id, raw_event)
+            return [(SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(completion_event, item))]
         if _field(item, "type") == "function_call":
             return _function_call_event(
                 _field(item, "name"),
@@ -207,7 +223,14 @@ def _translate_response_event(
             emitted_function_call_ids,
         )
     if event_type == "response.completed":
-        return [(SupervisorEventType.RUN_COMPLETED, {"status": "completed"})]
+        pending_events = [
+            (SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(completion_event))
+            for web_search_id, completion_event in pending_web_search_completions.items()
+            if web_search_id not in completed_web_search_ids
+        ]
+        completed_web_search_ids.update(pending_web_search_completions)
+        pending_web_search_completions.clear()
+        return [*pending_events, (SupervisorEventType.RUN_COMPLETED, {"status": "completed"})]
     if event_type in {"error", "response.failed"}:
         message = _failure_message(raw_event)
         raise AgentCrewError(AgentCrewErrorCode.PROVIDER_UNAVAILABLE, str(message))
@@ -279,21 +302,21 @@ def _web_search_completed_data(raw_event: Any, item: Any | None = None) -> dict[
     action = _field(item, "action") if item is not None else None
     queries = _safe_queries(
         _first_present(
-            _field(raw_event, "queries"),
             _field(item, "queries"),
             _field(action, "queries"),
-            _field(raw_event, "query"),
             _field(item, "query"),
             _field(action, "query"),
+            _field(raw_event, "queries"),
+            _field(raw_event, "query"),
         )
     )
     return {
         "id": _item_id(raw_event if _item_id(raw_event) != "unknown" else item),
         "queries": queries,
         "sources": _safe_sources(_first_present(
-            _field(raw_event, "sources"),
             _field(item, "sources"),
             _field(action, "sources"),
+            _field(raw_event, "sources"),
         )),
     }
 
