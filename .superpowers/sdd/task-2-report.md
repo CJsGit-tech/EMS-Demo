@@ -300,3 +300,63 @@ docker compose run ... api pytest tests/test_postgres_audit_integration.py -q
 .....                                                                    [100%]
 5 passed in 3.24s
 ```
+
+## AgentCrew MCP gateway delivery (2026-07-25)
+
+### Status
+
+Completed. The production AgentCrew path now selects the database-backed EMS
+adapter when `EMS_MCP_GATEWAY_MODE=database`; fixture mode is explicitly
+`fixtures` / `deterministic-fixtures`.
+
+### Delivered
+
+- Canonical production allowlist, active-site validation, bounded three-attempt
+  retries, approval checks, and safe audit/MCP-attempt persistence.
+- Supervisor workflow tool mappings, bounded session approvals, gateway-derived
+  report citation provenance, draft/revision persistence, and owner-only final
+  confirmation.
+- Persisted public SSE run artifacts, retrievable by supervisor run ID.
+- Internal FastAPI MCP calls now reuse the configured EMS service and reject
+  non-canonical tools outside fixture mode.
+
+### Commit
+
+- `51613d1 feat(agentcrew): add authoritative MCP gateway`
+
+### Verification
+
+Executed from `apps/site-integration-app/services/ems-api`:
+
+```text
+$ uv run --with asyncpg python -m pytest tests/test_authoritative_mcp_gateway.py -q
+2 passed in 0.01s
+
+$ uv run --with asyncpg python -m pytest tests/test_agentcrew_stream_persistence.py -q
+1 passed, 1 warning in 0.12s
+
+$ uv run --with asyncpg python -m pytest tests/test_runtime.py -q
+8 passed in 0.02s
+
+$ uv run --with asyncpg python -m pytest -q
+72 passed, 6 skipped, 1 warning in 0.45s
+
+$ uv run --with asyncpg python -m py_compile src/agentcrew/config.py src/agentcrew/mcp.py src/agentcrew/persistence.py src/agentcrew/service.py src/agentcrew/app.py src/ems/mcp_adapter.py
+# exit 0; no output
+
+$ git diff --cached --check
+# exit 0; no output
+```
+
+TDD RED initially failed with
+`ImportError: cannot import name 'AuthoritativeMcpGateway'`; it passed after
+the gateway implementation.
+
+### Concerns
+
+- Six isolated PostgreSQL/live-database tests remain skipped unless
+  `EMS_LIVE_DB=1`; this task did not run against a live database.
+- The worktree contains broad unrelated changes and untracked Task 1/support
+  files. Only the Task 2 implementation files in `51613d1` were staged.
+- Deployment should explicitly set `EMS_MCP_GATEWAY_MODE=database` as a
+  defense-in-depth guard.
