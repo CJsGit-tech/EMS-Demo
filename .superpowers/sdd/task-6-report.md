@@ -89,9 +89,9 @@ changes were preserved.
 
 ## Corrective outcome
 
-The corrected shell safety gate and isolated Compose smoke passed. Live
-in-app-browser evidence and the five PostgreSQL-only integration tests are not
-claimed as complete; their exact status is recorded below.
+The safety regression, isolated Compose smoke, browser verification, and the
+five PostgreSQL audit integration tests passed. The shell smoke verifies
+service and safety behavior; it does not prove UI language state or switching.
 
 ## Changes made
 
@@ -120,7 +120,7 @@ claimed as complete; their exact status is recorded below.
 | Safety regression | PASS | `bash tests/smoke_test_safety_scan.sh`: the three concrete call fixtures were rejected and missing `rg` failed closed. |
 | Smoke script syntax | PASS | `bash -n scripts/smoke_test_v2g_stack.sh tests/smoke_test_safety_scan.sh`. |
 | Updated live smoke | PASS | `V2G_COMPOSE_PROJECT=v2g-task6-corrective V2G_API_HOST_PORT=18006 V2G_UI_HOST_PORT=15182 ./scripts/smoke_test_v2g_stack.sh`: all services became healthy and the smoke success line was emitted. |
-| PostgreSQL-only suite | **NOT RUN** | The five tests require disposable `v2g_test` owner/runtime URLs. The attempted `createdb` command stopped at SCRAM password prompts; no pytest command ran and no equivalent-coverage claim is made. |
+| PostgreSQL audit integration | PASS | Temporary Compose API container with repository tests mounted read-only against disposable `v2g_test`: `docker compose -f apps/v2g-integration-app/docker-compose.yml run --rm -T -v /Users/chuang/Desktop/projects/EMS/EMS-Demo/apps/v2g-integration-app/services/v2g-api/tests:/app/tests:ro -e V2G_TEST_DATABASE_URL=postgresql+asyncpg://v2g_owner:v2g_owner_local_only@postgres:5432/v2g_test -e V2G_RUNTIME_TEST_DATABASE_URL=postgresql+asyncpg://v2g_runtime:v2g_runtime_local_only@postgres:5432/v2g_test api pytest tests/test_postgres_audit_integration.py -q` → `5 passed`; one pytest-cache warning was expected because `/app` is read-only. |
 
 ## Compose, migration, seed, and API verification
 
@@ -170,19 +170,21 @@ cannot directly mutate the append-only work-order-event table.
 
 ## Browser verification — completed
 
-The Compose stack was rebuilt and started at
-`http://127.0.0.1:5181/`. Browser verification confirmed:
+At `http://127.0.0.1:5181/`, the default interface rendered in Traditional
+Chinese. Switching to English rendered **Site overview**; switching back
+rendered **電站總覽**. Each real view was individually navigated and rendered
+its `h1`:
 
-- The default interface is Traditional Chinese. The sidebar contains only
-  **總覽**, **監控**, **維運**, and **分析**; Reports is absent.
-- Switching to English rendered **Site overview**. Switching back rendered
-  **電站總覽**.
-- The **Event management**, **Work orders**, and **Event analysis** routes each
-  rendered their corresponding heading. Event analysis reported a Reports
-  count of `0`.
-- Screenshot review of the Chinese Event Analysis dashboard passed: dark
-  operational SCADA layout, active sidebar state, and no Reports group.
+`電站總覽`, `車隊總覽`, `診斷`, `事件管理`, `即時監控`, `變流器監控`, `營運儀表板`,
+`維運紀錄`, `工作單`, `調度監督`, `電力歷史資料`, `站點效率`, `變流器效率`,
+`組串健康度`, and `事件分析`.
 
-This browser evidence completes the documented navigation and localization
-checks. No browser verification of stale, empty, or error states is recorded
-here.
+No **Reports** entry appeared in the DOM snapshot. The console error log was
+empty before the induced error-state test. After the local API was briefly
+stopped and the UI reloaded, the browser rendered the alerts
+`無法載入模擬資料。` and `Simulator request failed (502).` After the API was
+restarted, `/healthz` returned `{"status":"ok"}` and a reload returned
+**電站總覽** with no alert. No stale or empty-state result is claimed.
+
+The shell smoke result is not used as evidence for language state or language
+switching; those claims are supported only by the browser verification above.
