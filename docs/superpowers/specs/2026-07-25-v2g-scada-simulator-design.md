@@ -34,6 +34,15 @@ Excluded:
 - Grid-code, tariff, or market-rule claims beyond explicitly configured demo
   rules.
 
+## Application boundary
+
+`apps/v2g-integration-app/` is a new, independently runnable application. It
+owns its frontend, API, Docker Compose stack, database schema/migrations,
+simulator, tests, documentation, and environment examples. It does not import
+runtime code from `apps/site-integration-app/`, share its Compose services, or
+require that application to be running. The EMS sample schema and existing app
+may inform naming and future integration contracts only.
+
 ## Architecture
 
 ```text

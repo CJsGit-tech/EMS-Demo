@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "roles": [
+    {
+      "id": "product-manager",
+      "name": "Product Manager",
+      "source": "/Users/chuang/.codex/agents/product-manager.toml",
+      "copied_path": "agency/agents/product-manager.toml",
+      "tasks": [
+        "V2G product strategy, commercial outcomes, roadmap, and acceptance criteria"
+      ],
+      "managed_artifacts": [
+        "agency/agents/product-manager.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.267759+00:00"
+    },
+    {
+      "id": "workflow-architect",
+      "name": "Workflow Architect",
+      "source": "/Users/chuang/.codex/agents/workflow-architect.toml",
+      "copied_path": "agency/agents/workflow-architect.toml",
+      "tasks": [
+        "dispatch approvals, charging and discharging workflows, exception handling, and recovery paths"
+      ],
+      "managed_artifacts": [
+        "agency/agents/workflow-architect.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.332654+00:00"
+    },
+    {
+      "id": "ux-architect",
+      "name": "Ux Architect",
+      "source": "/Users/chuang/.codex/agents/ux-architect.toml",
+      "copied_path": "agency/agents/ux-architect.toml",
+      "tasks": [
+        "energy-operations information architecture, decision flows, and responsive task guidance"
+      ],
+      "managed_artifacts": [
+        "agency/agents/ux-architect.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.397234+00:00"
+    },
+    {
+      "id": "ui-designer",
+      "name": "Ui Designer",
+      "source": "/Users/chuang/.codex/agents/ui-designer.toml",
+      "copied_path": "agency/agents/ui-designer.toml",
+      "tasks": [
+        "forecasting, dispatch, inventory, and operational dashboard design"
+      ],
+      "managed_artifacts": [
+        "agency/agents/ui-designer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.460829+00:00"
+    },
+    {
+      "id": "frontend-developer",
+      "name": "Frontend Developer",
+      "source": "/Users/chuang/.codex/agents/frontend-developer.toml",
+      "copied_path": "agency/agents/frontend-developer.toml",
+      "tasks": [
+        "React user interfaces, visualization interactions, accessibility, and frontend tests"
+      ],
+      "managed_artifacts": [
+        "agency/agents/frontend-developer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.525600+00:00"
+    },
+    {
+      "id": "backend-architect",
+      "name": "Backend Architect",
+      "source": "/Users/chuang/.codex/agents/backend-architect.toml",
+      "copied_path": "agency/agents/backend-architect.toml",
+      "tasks": [
+        "V2G domain services, dispatch APIs, authorization, and integration architecture"
+      ],
+      "managed_artifacts": [
+        "agency/agents/backend-architect.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.587787+00:00"
+    },
+    {
+      "id": "api-platform-engineer",
+      "name": "Api Platform Engineer",
+      "source": "/Users/chuang/.codex/agents/api-platform-engineer.toml",
+      "copied_path": "agency/agents/api-platform-engineer.toml",
+      "tasks": [
+        "charger, market, partner, and internal API contracts with versioning and policy"
+      ],
+      "managed_artifacts": [
+        "agency/agents/api-platform-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.651431+00:00"
+    },
+    {
+      "id": "iot-fleet-engineer",
+      "name": "Iot Fleet Engineer",
+      "source": "/Users/chuang/.codex/agents/iot-fleet-engineer.toml",
+      "copied_path": "agency/agents/iot-fleet-engineer.toml",
+      "tasks": [
+        "charger telemetry, availability, command state, and fleet connectivity"
+      ],
+      "managed_artifacts": [
+        "agency/agents/iot-fleet-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.714752+00:00"
+    },
+    {
+      "id": "data-engineer",
+      "name": "Data Engineer",
+      "source": "/Users/chuang/.codex/agents/data-engineer.toml",
+      "copied_path": "agency/agents/data-engineer.toml",
+      "tasks": [
+        "forecast inputs, telemetry quality, optimization data pipelines, and data lineage"
+      ],
+      "managed_artifacts": [
+        "agency/agents/data-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.777589+00:00"
+    },
+    {
+      "id": "database-optimizer",
+      "name": "Database Optimizer",
+      "source": "/Users/chuang/.codex/agents/database-optimizer.toml",
+      "copied_path": "agency/agents/database-optimizer.toml",
+      "tasks": [
+        "PostgreSQL time-series, forecast, dispatch, and commercialization query performance"
+      ],
+      "managed_artifacts": [
+        "agency/agents/database-optimizer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.840943+00:00"
+    },
+    {
+      "id": "ai-engineer",
+      "name": "Ai Engineer",
+      "source": "/Users/chuang/.codex/agents/ai-engineer.toml",
+      "copied_path": "agency/agents/ai-engineer.toml",
+      "tasks": [
+        "generation and consumption forecasting, anomaly detection, and optimization decision support"
+      ],
+      "managed_artifacts": [
+        "agency/agents/ai-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.904949+00:00"
+    },
+    {
+      "id": "mcp-builder",
+      "name": "Mcp Builder",
+      "source": "/Users/chuang/.codex/agents/mcp-builder.toml",
+      "copied_path": "agency/agents/mcp-builder.toml",
+      "tasks": [
+        "V2G and energy-resource MCP tools, resources, and scoped AI retrieval contracts"
+      ],
+      "managed_artifacts": [
+        "agency/agents/mcp-builder.toml"
+      ],
+      "installed_at": "2026-07-25T02:18:59.968030+00:00"
+    },
+    {
+      "id": "application-security-engineer",
+      "name": "Application Security Engineer",
+      "source": "/Users/chuang/.codex/agents/application-security-engineer.toml",
+      "copied_path": "agency/agents/application-security-engineer.toml",
+      "tasks": [
+        "control-command authorization, auditability, security design, and threat modelling"
+      ],
+      "managed_artifacts": [
+        "agency/agents/application-security-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:19:00.030041+00:00"
+    },
+    {
+      "id": "sre-site-reliability-engineer",
+      "name": "Sre Site Reliability Engineer",
+      "source": "/Users/chuang/.codex/agents/sre-site-reliability-engineer.toml",
+      "copied_path": "agency/agents/sre-site-reliability-engineer.toml",
+      "tasks": [
+        "dispatch-service reliability, observability, SLOs, and incident readiness"
+      ],
+      "managed_artifacts": [
+        "agency/agents/sre-site-reliability-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:19:00.092721+00:00"
+    },
+    {
+      "id": "test-automation-engineer",
+      "name": "Test Automation Engineer",
+      "source": "/Users/chuang/.codex/agents/test-automation-engineer.toml",
+      "copied_path": "agency/agents/test-automation-engineer.toml",
+      "tasks": [
+        "forecast, dispatch, authorization, API, and end-to-end regression coverage"
+      ],
+      "managed_artifacts": [
+        "agency/agents/test-automation-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:19:00.155971+00:00"
+    },
+    {
+      "id": "technical-writer",
+      "name": "Technical Writer",
+      "source": "/Users/chuang/.codex/agents/technical-writer.toml",
+      "copied_path": "agency/agents/technical-writer.toml",
+      "tasks": [
+        "V2G API contracts, operating runbooks, decision-policy documentation, and integration guides"
+      ],
+      "managed_artifacts": [
+        "agency/agents/technical-writer.toml"
+      ],
+      "installed_at": "2026-07-25T02:19:00.221234+00:00"
+    },
+    {
+      "id": "network-engineer",
+      "name": "Network Engineer",
+      "source": "/Users/chuang/.codex/agents/network-engineer.toml",
+      "copied_path": "agency/agents/network-engineer.toml",
+      "tasks": [
+        "V2G SCADA simulator prototype"
+      ],
+      "managed_artifacts": [
+        "agency/agents/network-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:46:23.089770+00:00"
+    },
+    {
+      "id": "security-architect",
+      "name": "Security Architect",
+      "source": "/Users/chuang/.codex/agents/security-architect.toml",
+      "copied_path": "agency/agents/security-architect.toml",
+      "tasks": [
+        "V2G SCADA simulator prototype"
+      ],
+      "managed_artifacts": [
+        "agency/agents/security-architect.toml"
+      ],
+      "installed_at": "2026-07-25T02:46:23.112585+00:00"
+    },
+    {
+      "id": "embedded-firmware-engineer",
+      "name": "Embedded Firmware Engineer",
+      "source": "/Users/chuang/.codex/agents/embedded-firmware-engineer.toml",
+      "copied_path": "agency/agents/embedded-firmware-engineer.toml",
+      "tasks": [
+        "V2G SCADA simulator prototype"
+      ],
+      "managed_artifacts": [
+        "agency/agents/embedded-firmware-engineer.toml"
+      ],
+      "installed_at": "2026-07-25T02:46:23.135018+00:00"
+    },
+    {
+      "id": "model-qa-specialist",
+      "name": "Model Qa Specialist",
+      "source": "/Users/chuang/.codex/agents/model-qa-specialist.toml",
+      "copied_path": "agency/agents/model-qa-specialist.toml",
+      "tasks": [
+        "V2G SCADA simulator prototype"
+      ],
+      "managed_artifacts": [
+        "agency/agents/model-qa-specialist.toml"
+      ],
+      "installed_at": "2026-07-25T02:46:23.156273+00:00"
+    }
+  ]
+}
