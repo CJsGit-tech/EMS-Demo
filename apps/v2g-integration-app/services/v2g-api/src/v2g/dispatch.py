@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import isfinite
+from numbers import Real
 
 
 class CommandPolicyError(ValueError):
@@ -64,7 +65,10 @@ def _require_timezone_aware(value: datetime, field_name: str) -> None:
         raise ValueError(f"{field_name} requires a timezone-aware timestamp")
 
 
-def _require_finite_numeric(value: float, field_name: str) -> None:
+def _require_finite_numeric(value: object, field_name: str) -> None:
+    """Reject non-numeric, boolean, and non-finite runtime values safely."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise CommandPolicyError(f"invalid numeric value: {field_name}")
     if not isfinite(value):
         raise CommandPolicyError(f"non-finite numeric value: {field_name}")
 

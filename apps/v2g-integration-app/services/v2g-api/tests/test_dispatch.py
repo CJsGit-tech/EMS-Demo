@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from math import nan
+from math import inf, nan
 
 import pytest
 
@@ -65,19 +65,22 @@ def test_validate_request_rejects_discharge_below_departure_soc():
 
 
 @pytest.mark.parametrize(
-    ("request_overrides", "state_overrides", "field_name"),
+    ("request_overrides", "state_overrides", "error_message"),
     [
-        ({"power_kw": nan}, {}, "request.power_kw"),
-        ({"projected_soc_percent": nan}, {}, "request.projected_soc_percent"),
-        ({}, {"soc_percent": nan}, "state.soc_percent"),
-        ({}, {"minimum_departure_soc_percent": nan}, "state.minimum_departure_soc_percent"),
-        ({}, {"available_flexible_kw": nan}, "state.available_flexible_kw"),
+        ({"power_kw": nan}, {}, "non-finite numeric value: request.power_kw"),
+        ({"power_kw": inf}, {}, "non-finite numeric value: request.power_kw"),
+        ({"power_kw": "25"}, {}, "invalid numeric value: request.power_kw"),
+        ({"power_kw": True}, {}, "invalid numeric value: request.power_kw"),
+        ({"projected_soc_percent": nan}, {}, "non-finite numeric value: request.projected_soc_percent"),
+        ({}, {"soc_percent": nan}, "non-finite numeric value: state.soc_percent"),
+        ({}, {"minimum_departure_soc_percent": nan}, "non-finite numeric value: state.minimum_departure_soc_percent"),
+        ({}, {"available_flexible_kw": nan}, "non-finite numeric value: state.available_flexible_kw"),
     ],
 )
 def test_validate_request_rejects_non_finite_numeric_values(
-    request_overrides, state_overrides, field_name
+    request_overrides, state_overrides, error_message
 ):
-    with pytest.raises(CommandPolicyError, match=f"non-finite numeric value: {field_name}"):
+    with pytest.raises(CommandPolicyError, match=error_message):
         validate_request(request(**request_overrides), site_state(**state_overrides))
 
 

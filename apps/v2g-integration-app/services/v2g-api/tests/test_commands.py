@@ -3,7 +3,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from v2g.commands import CommandPolicyError, CommandRequest, CommandService
+from v2g.commands import (
+    CommandPolicyError,
+    CommandRequest,
+    CommandService,
+    InMemoryCommandRepository,
+)
 from v2g.dispatch import SiteState
 
 
@@ -35,8 +40,8 @@ def valid_request(**overrides):
     return CommandRequest(**values)
 
 
-def service() -> CommandService:
-    return CommandService(site_state(), now=lambda: NOW)
+def service(repository: InMemoryCommandRepository | None = None) -> CommandService:
+    return CommandService(site_state(), repository=repository, now=lambda: NOW)
 
 
 def test_expired_command_cannot_be_approved():
@@ -96,6 +101,35 @@ def test_rejection_requires_a_non_empty_reason():
     asyncio.run(scenario())
 
 
+def test_rejection_persists_the_terminal_state_and_audit_sequence():
+    async def scenario():
+        repository = InMemoryCommandRepository()
+        commands = service(repository)
+        command = await commands.request(valid_request())
+
+        await commands.reject(command.command_id, actor="operator-01", reason="operator review")
+
+        persisted = await commands.reload(command.command_id)
+        assert persisted.state == "rejected"
+        assert persisted.rejection_reason == "operator review"
+        assert [event.event_type for event in persisted.audit_events] == [
+            "command.requested",
+            "command.validated",
+            "command.awaiting_approval",
+            "command.rejected",
+        ]
+        assert [event.from_state for event in persisted.audit_events] == [
+            None,
+            "requested",
+            "validated",
+            "awaiting_approval",
+        ]
+        assert persisted.audit_events[-1].actor == "operator-01"
+        assert persisted.audit_events[-1].reason == "operator review"
+
+    asyncio.run(scenario())
+
+
 def test_cancellation_requires_a_non_empty_reason():
     async def scenario():
         commands = service()
@@ -105,6 +139,30 @@ def test_cancellation_requires_a_non_empty_reason():
             await commands.cancel(command.command_id, actor="operator-01", reason="")
 
         assert command.state == "awaiting_approval"
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_persists_the_terminal_state_and_audit_sequence():
+    async def scenario():
+        repository = InMemoryCommandRepository()
+        commands = service(repository)
+        command = await commands.request(valid_request())
+        await commands.approve(command.command_id, actor="operator-01")
+
+        await commands.cancel(command.command_id, actor="operator-02", reason="superseded")
+
+        persisted = await commands.reload(command.command_id)
+        assert persisted.state == "cancelled"
+        assert [event.event_type for event in persisted.audit_events] == [
+            "command.requested",
+            "command.validated",
+            "command.awaiting_approval",
+            "command.approved",
+            "command.cancelled",
+        ]
+        assert persisted.audit_events[-1].actor == "operator-02"
+        assert persisted.audit_events[-1].reason == "superseded"
 
     asyncio.run(scenario())
 
@@ -137,5 +195,73 @@ def test_request_requires_correlation_and_idempotency_identifiers():
 
         with pytest.raises(CommandPolicyError, match="idempotency"):
             await service().request(valid_request(idempotency_key=""))
+
+    asyncio.run(scenario())
+
+
+def test_expiry_persists_terminal_state_and_audit_sequence():
+    async def scenario():
+        repository = InMemoryCommandRepository()
+        commands = service(repository)
+        command = await commands.request(valid_request(expires_at=NOW - timedelta(minutes=1)))
+
+        with pytest.raises(CommandPolicyError, match="expired"):
+            await commands.approve(command.command_id, actor="operator-01")
+
+        persisted = await commands.reload(command.command_id)
+        assert persisted.state == "expired"
+        assert [event.event_type for event in persisted.audit_events] == [
+            "command.requested",
+            "command.validated",
+            "command.awaiting_approval",
+            "command.expired",
+        ]
+        assert persisted.audit_events[-1].reason == "command expired"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("bad_power", [float("nan"), "10", True])
+def test_invalid_numeric_request_is_not_persisted_and_does_not_poison_retry(bad_power):
+    async def scenario():
+        repository = InMemoryCommandRepository()
+        commands = service(repository)
+        malformed = valid_request(power_kw=bad_power)
+
+        with pytest.raises(CommandPolicyError, match="numeric value"):
+            await commands.request(malformed)
+
+        assert repository.by_idempotency_key(malformed.idempotency_key) is None
+
+        retry = await commands.request(valid_request(power_kw=10.0))
+        persisted = await commands.reload(retry.command_id)
+        assert persisted.state == "awaiting_approval"
+        assert [event.event_type for event in persisted.audit_events] == [
+            "command.requested",
+            "command.validated",
+            "command.awaiting_approval",
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_concurrent_requests_with_the_same_idempotency_key_create_one_command():
+    async def scenario():
+        repository = InMemoryCommandRepository()
+        commands = service(repository)
+
+        first, second = await asyncio.gather(
+            commands.request(valid_request()),
+            commands.request(valid_request(correlation_id="corr-concurrent")),
+        )
+
+        assert first.command_id == second.command_id
+        assert len(repository.commands) == 1
+        persisted = await commands.reload(first.command_id)
+        assert [event.event_type for event in persisted.audit_events] == [
+            "command.requested",
+            "command.validated",
+            "command.awaiting_approval",
+        ]
 
     asyncio.run(scenario())

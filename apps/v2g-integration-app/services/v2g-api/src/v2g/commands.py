@@ -95,6 +95,10 @@ class InMemoryCommandRepository:
     def get(self, command_id: str) -> SimulatedCommand | None:
         return self.commands.get(command_id)
 
+    def reload(self, command_id: str) -> SimulatedCommand | None:
+        """Return the current immutable snapshot for verification or recovery."""
+        return self.get(command_id)
+
     def add(self, command: SimulatedCommand) -> None:
         self.commands[command.command_id] = command
         self.command_ids_by_idempotency_key[command.idempotency_key] = command.command_id
@@ -127,6 +131,10 @@ class CommandService:
             if existing is not None:
                 return existing
 
+            # Validate before allocating a command or recording its idempotency key.
+            # A malformed runtime value must never poison a later valid retry.
+            validate_request(request, self._site_state)
+
             command = SimulatedCommand(
                 command_id=str(uuid4()),
                 request=request,
@@ -136,17 +144,17 @@ class CommandService:
             command = self._transition(command, "requested")
             self._repository.add(command)
 
-            try:
-                validate_request(request, self._site_state)
-            except (CommandPolicyError, ValueError) as error:
-                self._repository.replace(
-                    self._transition(command, "failed", reason=str(error))
-                )
-                raise
-
             command = self._transition(command, "validated")
             command = self._transition(command, "awaiting_approval")
             self._repository.replace(command)
+            return command
+
+    async def reload(self, command_id: str) -> SimulatedCommand:
+        """Load the latest immutable command snapshot from the injected repository."""
+        async with self._repository.lock:
+            command = self._repository.reload(command_id)
+            if command is None:
+                raise CommandPolicyError("unknown command")
             return command
 
     async def approve(self, command_id: str, actor: str) -> SimulatedCommand:
