@@ -10,16 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
-from alembic.config import Config
-from alembic.runtime.environment import EnvironmentContext
-from alembic.script import ScriptDirectory
 from sqlalchemy import text
-from sqlalchemy.engine import Connection, make_url
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -48,46 +46,50 @@ def postgres_test_url() -> str:
     return database_url
 
 
-def _upgrade_to_head(connection: Connection) -> None:
-    """Run Alembic's real revision graph against an async connection's sync bridge."""
-    config = Config(str(PROJECT_ROOT / "alembic.ini"))
-    script = ScriptDirectory.from_config(config)
-
-    def upgrade(revision: str | None, _context: Any) -> list[Any]:
-        return script._upgrade_revs("head", revision)
-
-    with EnvironmentContext(config, script, fn=upgrade, destination_rev="head") as environment:
-        environment.configure(connection=connection)
-        with environment.begin_transaction():
-            environment.run_migrations()
+async def _reset_schema(database_url: str) -> None:
+    """Remove all objects from the disposable PostgreSQL schema."""
+    engine = create_async_engine(database_url, pool_size=8, max_overflow=0)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            await connection.execute(text("CREATE SCHEMA public"))
+    finally:
+        await engine.dispose()
 
 
-async def _reset_and_upgrade(engine: AsyncEngine) -> None:
-    """Remove all disposable schema objects, then apply the Alembic head revision."""
-    async with engine.begin() as connection:
-        await connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        await connection.execute(text("CREATE SCHEMA public"))
-
-    async with engine.begin() as connection:
-        await connection.run_sync(_upgrade_to_head)
-
-
-async def _clean_disposable_schema(engine: AsyncEngine) -> None:
-    async with engine.begin() as connection:
-        await connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        await connection.execute(text("CREATE SCHEMA public"))
+def _upgrade_to_head(database_url: str) -> None:
+    """Execute the production Alembic CLI using the application's async URL."""
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = database_url
+    result = subprocess.run(
+        [str(Path(sys.executable).with_name("alembic")), "upgrade", "head"],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
-async def _in_disposable_postgres(
+async def _assert_in_disposable_postgres(
     database_url: str, assertion: Callable[[AsyncEngine], Awaitable[None]]
 ) -> None:
     engine = create_async_engine(database_url, pool_size=8, max_overflow=0)
     try:
-        await _reset_and_upgrade(engine)
         await assertion(engine)
     finally:
-        await _clean_disposable_schema(engine)
         await engine.dispose()
+
+
+def _in_disposable_postgres(
+    database_url: str, assertion: Callable[[AsyncEngine], Awaitable[None]]
+) -> None:
+    try:
+        asyncio.run(_reset_schema(database_url))
+        _upgrade_to_head(database_url)
+        asyncio.run(_assert_in_disposable_postgres(database_url, assertion))
+    finally:
+        asyncio.run(_reset_schema(database_url))
 
 
 def test_audit_records_reject_update_delete_and_truncate(postgres_test_url: str) -> None:
@@ -104,7 +106,7 @@ def test_audit_records_reject_update_delete_and_truncate(postgres_test_url: str)
                 async with engine.begin() as connection:
                     await connection.execute(text(statement))
 
-    asyncio.run(_in_disposable_postgres(postgres_test_url, assertion))
+    _in_disposable_postgres(postgres_test_url, assertion)
 
 
 def test_audit_events_receive_ordered_sequences(postgres_test_url: str) -> None:
@@ -115,7 +117,7 @@ def test_audit_events_receive_ordered_sequences(postgres_test_url: str) -> None:
 
         assert [event.sequence for event in await repository.audit_events("cmd-sequenced")] == [1, 2]
 
-    asyncio.run(_in_disposable_postgres(postgres_test_url, assertion))
+    _in_disposable_postgres(postgres_test_url, assertion)
 
 
 def test_concurrent_same_command_audit_appends_are_unique_and_ordered(
@@ -138,4 +140,4 @@ def test_concurrent_same_command_audit_appends_are_unique_and_ordered(
         assert sequences == list(range(1, append_count + 1))
         assert len(sequences) == len(set(sequences))
 
-    asyncio.run(_in_disposable_postgres(postgres_test_url, assertion))
+    _in_disposable_postgres(postgres_test_url, assertion)
