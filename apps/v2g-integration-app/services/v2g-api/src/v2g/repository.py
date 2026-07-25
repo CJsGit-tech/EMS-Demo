@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from v2g.models import AuditRecord, Base, Evse
+from v2g.models import AuditRecord, Base, Evse, InverterReading, StringReading, WorkOrder, WorkOrderEvent
 
 
 class V2GRepository:
@@ -48,6 +48,44 @@ class V2GRepository:
                 select(func.count()).select_from(Evse).where(Evse.site_id == site_id)
             )
         return int(count or 0)
+
+    async def count_inverter_readings(self, site_id: str) -> int:
+        async with self._sessions() as session:
+            count = await session.scalar(
+                select(func.count()).select_from(InverterReading).where(InverterReading.site_id == site_id)
+            )
+        return int(count or 0)
+
+    async def count_string_readings(self, site_id: str) -> int:
+        async with self._sessions() as session:
+            count = await session.scalar(
+                select(func.count()).select_from(StringReading).where(StringReading.site_id == site_id)
+            )
+        return int(count or 0)
+
+    async def list_work_orders(self, site_id: str) -> list[WorkOrder]:
+        async with self._sessions() as session:
+            return list(
+                await session.scalars(
+                    select(WorkOrder)
+                    .where(WorkOrder.site_id == site_id)
+                    .order_by(WorkOrder.created_at, WorkOrder.work_order_id)
+                )
+            )
+
+    async def append_work_order_event(
+        self, work_order_id: str, event_type: str, payload: dict[str, Any]
+    ) -> WorkOrderEvent:
+        """Append a work-order history event without exposing mutation operations."""
+        async with self._sessions.begin() as session:
+            event = WorkOrderEvent(
+                work_order_id=work_order_id,
+                event_type=event_type,
+                payload=payload,
+            )
+            session.add(event)
+            await session.flush()
+            return event
 
     async def append_audit(
         self, command_id: str, event_type: str, payload: dict[str, Any]

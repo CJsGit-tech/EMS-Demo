@@ -11,7 +11,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from v2g.alarms import AlarmService
-from v2g.models import Alarm, ChargingSession, Evse, TelemetryPoint
+from v2g.models import (
+    Alarm,
+    ChargingSession,
+    Evse,
+    InverterReading,
+    StringReading,
+    TelemetryPoint,
+    WorkOrder,
+    WorkOrderEvent,
+)
 from v2g.simulator import DEMO_SITE_ID, FleetSimulator, SimulatorEvent
 
 
@@ -28,6 +37,10 @@ class DemoFleet:
     sessions: tuple[ChargingSession, ...]
     telemetry_points: tuple[TelemetryPoint, ...]
     alarms: tuple[Alarm, ...]
+    inverter_readings: tuple[InverterReading, ...]
+    string_readings: tuple[StringReading, ...]
+    work_orders: tuple[WorkOrder, ...]
+    work_order_events: tuple[WorkOrderEvent, ...]
 
 
 def build_demo_fleet(at: datetime = DEMO_SEED_AT) -> DemoFleet:
@@ -89,7 +102,122 @@ def build_demo_fleet(at: datetime = DEMO_SEED_AT) -> DemoFleet:
         for event in FleetSimulator(seed=0).tick(at)
         for alarm in alarm_service.raise_or_clear(event)
     )
-    return DemoFleet(evses, sessions, telemetry_points, alarms)
+    inverter_readings = (
+        InverterReading(
+            inverter_id="inv-01",
+            site_id=DEMO_SITE_ID,
+            ac_power_kw=18.2,
+            dc_power_kw=19.1,
+            temperature_c=42.0,
+            efficiency_percent=95.3,
+            communication_state="good",
+            source="simulated",
+            occurred_at=at,
+        ),
+        InverterReading(
+            inverter_id="inv-02",
+            site_id=DEMO_SITE_ID,
+            ac_power_kw=17.4,
+            dc_power_kw=18.3,
+            temperature_c=44.1,
+            efficiency_percent=95.1,
+            communication_state="good",
+            source="simulated",
+            occurred_at=at,
+        ),
+        InverterReading(
+            inverter_id="inv-03",
+            site_id=DEMO_SITE_ID,
+            ac_power_kw=15.6,
+            dc_power_kw=16.7,
+            temperature_c=48.6,
+            efficiency_percent=93.4,
+            communication_state="degraded",
+            source="simulated",
+            occurred_at=at,
+        ),
+        InverterReading(
+            inverter_id="inv-04",
+            site_id=DEMO_SITE_ID,
+            ac_power_kw=19.3,
+            dc_power_kw=20.1,
+            temperature_c=40.8,
+            efficiency_percent=96.0,
+            communication_state="good",
+            source="simulated",
+            occurred_at=at,
+        ),
+        InverterReading(
+            inverter_id="inv-05",
+            site_id=DEMO_SITE_ID,
+            ac_power_kw=13.8,
+            dc_power_kw=15.0,
+            temperature_c=51.2,
+            efficiency_percent=92.0,
+            communication_state="degraded",
+            source="simulated",
+            occurred_at=at,
+        ),
+    )
+    string_readings = tuple(
+        reading
+        for inverter in inverter_readings
+        for reading in _string_readings(inverter)
+    )
+    work_orders = (
+        WorkOrder(
+            work_order_id="wo-001",
+            site_id=DEMO_SITE_ID,
+            asset_id="evse-03",
+            source_alarm_code="EVSE_UNAVAILABLE",
+            state="open",
+            severity="high",
+            assigned_team="維運一組",
+            summary="EVSE 03 通訊異常待檢修",
+            created_at=at - timedelta(hours=3),
+        ),
+        WorkOrder(
+            work_order_id="wo-002",
+            site_id=DEMO_SITE_ID,
+            asset_id="evse-02",
+            source_alarm_code="POWER_DERATE",
+            state="in_progress",
+            severity="medium",
+            assigned_team="維運二組",
+            summary="EVSE 02 輸出功率降載檢查中",
+            created_at=at - timedelta(hours=2),
+        ),
+        WorkOrder(
+            work_order_id="wo-003",
+            site_id=DEMO_SITE_ID,
+            asset_id="evse-05",
+            source_alarm_code="SESSION_INTERRUPTED",
+            state="completed",
+            severity="low",
+            assigned_team="維運一組",
+            summary="EVSE 05 充電中斷已完成現場排查",
+            created_at=at - timedelta(hours=1),
+        ),
+    )
+    work_order_events = tuple(
+        WorkOrderEvent(
+            work_order_id=order.work_order_id,
+            event_type=f"work_order.{order.state}",
+            payload={"source": "simulated", "state": order.state},
+            occurred_at=order.created_at,
+        )
+        for order in work_orders
+    )
+    return DemoFleet(
+        evses,
+        sessions,
+        telemetry_points,
+        alarms,
+        inverter_readings,
+        string_readings,
+        work_orders,
+        work_order_events,
+    )
 
 
 async def seed_demo_fleet(
@@ -130,8 +258,12 @@ async def seed_demo_fleet(
                 *fleet.telemetry_points,
                 *fleet.alarms,
                 *current_telemetry,
+                *fleet.inverter_readings,
+                *fleet.work_orders,
             ]
         )
+        await session.flush()
+        session.add_all([*fleet.string_readings, *fleet.work_order_events])
 
     if publish is not None:
         for event in events:
@@ -168,4 +300,20 @@ def _telemetry_from_event(event: SimulatorEvent) -> TelemetryPoint:
         quality="good",
         occurred_at=event.occurred_at,
         received_at=event.occurred_at,
+    )
+
+
+def _string_readings(inverter: InverterReading) -> tuple[StringReading, ...]:
+    median_power_kw = float(inverter.dc_power_kw) / 8
+    deviations_kw = (-0.28, -0.20, -0.12, -0.04, 0.04, 0.12, 0.20, 0.28)
+    return tuple(
+        StringReading(
+            inverter_id=inverter.inverter_id,
+            site_id=inverter.site_id,
+            string_id=f"{inverter.inverter_id}-str-{number:02d}",
+            dc_power_kw=round(median_power_kw + deviation, 3),
+            source="simulated",
+            occurred_at=inverter.occurred_at,
+        )
+        for number, deviation in enumerate(deviations_kw, start=1)
     )

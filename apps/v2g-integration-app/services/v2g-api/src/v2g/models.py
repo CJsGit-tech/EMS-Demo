@@ -136,3 +136,67 @@ class AuditRecord(Base):
         if not isinstance(other, AuditRecord):
             return NotImplemented
         return self.audit_id == other.audit_id
+
+
+class InverterReading(Base):
+    __tablename__ = "inverter_readings"
+    __table_args__ = (Index("ix_inverter_readings_site_occurred_at", "site_id", "occurred_at"),)
+
+    inverter_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    site_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    ac_power_kw: Mapped[float] = mapped_column(Numeric(18, 6), nullable=False)
+    dc_power_kw: Mapped[float] = mapped_column(Numeric(18, 6), nullable=False)
+    temperature_c: Mapped[float] = mapped_column(Numeric(18, 6), nullable=False)
+    efficiency_percent: Mapped[float] = mapped_column(Numeric(18, 6), nullable=False)
+    communication_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="simulated")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class StringReading(Base):
+    __tablename__ = "string_readings"
+    __table_args__ = (
+        Index("ix_string_readings_inverter_occurred_at", "inverter_id", "occurred_at"),
+        Index("ix_string_readings_site_occurred_at", "site_id", "occurred_at"),
+    )
+
+    string_reading_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inverter_id: Mapped[str] = mapped_column(
+        ForeignKey("inverter_readings.inverter_id", ondelete="RESTRICT"), nullable=False
+    )
+    site_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    string_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    dc_power_kw: Mapped[float] = mapped_column(Numeric(18, 6), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="simulated")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkOrder(Base):
+    __tablename__ = "work_orders"
+    __table_args__ = (
+        Index("ix_work_orders_site_created_at", "site_id", "created_at"),
+        Index("ix_work_orders_asset_created_at", "asset_id", "created_at"),
+    )
+
+    work_order_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    site_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("evses.asset_id", ondelete="RESTRICT"))
+    source_alarm_code: Mapped[str | None] = mapped_column(String(128))
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    assigned_team: Mapped[str] = mapped_column(String(128), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkOrderEvent(Base):
+    __tablename__ = "work_order_events"
+    __table_args__ = (Index("ix_work_order_events_work_order_occurred_at", "work_order_id", "occurred_at"),)
+
+    work_order_event_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    work_order_id: Mapped[str] = mapped_column(
+        ForeignKey("work_orders.work_order_id", ondelete="RESTRICT"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JsonDocument, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
