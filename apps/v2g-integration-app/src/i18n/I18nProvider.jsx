@@ -32,6 +32,11 @@ export function I18nProvider({ children }) {
 
 export function useI18n() {
   const value = useContext(I18nContext);
-  if (!value) throw new Error("useI18n must be used within an I18nProvider");
-  return value;
+  if (value) return value;
+  return {
+    locale: "en",
+    setLocale: () => {},
+    t: (key, values = {}) => (en[key] ?? key)
+      .replace(/\{(\w+)\}/g, (_, token) => String(values[token] ?? `{${token}}`)),
+  };
 }

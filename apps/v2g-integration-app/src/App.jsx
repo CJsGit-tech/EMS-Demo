@@ -10,6 +10,12 @@ import { EventManagementPage } from "./features/monitoring/EventManagementPage.j
 import { InverterMonitoringPage } from "./features/monitoring/InverterMonitoringPage.jsx";
 import { LiveMonitoringPage } from "./features/monitoring/LiveMonitoringPage.jsx";
 import { OperationsPage } from "./features/operations/OperationsPage.jsx";
+import { OperationsLogPage } from "./features/operations/OperationsLogPage.jsx";
+import { WorkOrdersPage } from "./features/operations/WorkOrdersPage.jsx";
+import { SiteEfficiencyPage } from "./features/analytics/SiteEfficiencyPage.jsx";
+import { InverterEfficiencyPage } from "./features/analytics/InverterEfficiencyPage.jsx";
+import { StringHealthPage } from "./features/analytics/StringHealthPage.jsx";
+import { EventAnalysisPage } from "./features/analytics/EventAnalysisPage.jsx";
 import { DiagnosticsPage } from "./features/overview/DiagnosticsPage.jsx";
 import { FleetOverviewPage } from "./features/overview/FleetOverviewPage.jsx";
 import { SiteOverviewPage } from "./features/overview/SiteOverviewPage.jsx";
@@ -64,6 +70,8 @@ function AppShell() {
         return { ...snapshot, trends };
       }
       if (activeView === "dispatch") return v2gApi.getRecommendations();
+      if (["operationsLog", "workOrders"].includes(activeView)) return v2gApi.getWorkOrders();
+      if (["siteEfficiency", "inverterEfficiency", "stringHealth", "eventAnalysis"].includes(activeView)) return v2gApi.getAnalytics(window);
       return v2gApi.getHistorian(window);
     };
     setResource({ state: "loading", data: null, error: null });
@@ -78,6 +86,7 @@ function AppShell() {
   const { data, state, error } = resource;
   const recordApproval = (commandId, reason) => v2gApi.approveCommand(commandId, { actor: "local-scada-operator", reason });
   const recordRejection = (commandId, reason) => v2gApi.rejectCommand(commandId, { actor: "local-scada-operator", reason });
+  const transitionWorkOrder = (workOrderId, transition) => v2gApi.transitionWorkOrder(workOrderId, transition);
   const updateDispatchCommand = (command) => {
     if (!command?.command_id || !command?.state) return;
     setResource((current) => {
@@ -86,7 +95,7 @@ function AppShell() {
       return { ...current, data: { ...current.data, recommendations: recommendations.map((recommendation) => recommendation.command_id === command.command_id ? { ...recommendation, state: command.state } : recommendation) } };
     });
   };
-  const headings = { siteOverview: "page.siteOverview", fleetOverview: "page.fleetOverview", diagnostics: "page.diagnostics", events: "page.events", liveMonitoring: "page.liveMonitoring", inverters: "page.inverters", operations: "nav.operationsDashboard", dispatch: "nav.dispatchSupervisor", historian: "nav.powerHistorian" };
+  const headings = { siteOverview: "page.siteOverview", fleetOverview: "page.fleetOverview", diagnostics: "page.diagnostics", events: "page.events", liveMonitoring: "page.liveMonitoring", inverters: "page.inverters", operations: "nav.operationsDashboard", operationsLog: "page.operationsLog", workOrders: "page.workOrders", dispatch: "nav.dispatchSupervisor", historian: "nav.powerHistorian", siteEfficiency: "page.siteEfficiency", inverterEfficiency: "page.inverterEfficiency", stringHealth: "page.stringHealth", eventAnalysis: "page.eventAnalysis" };
   const alarmCount = data?.alarms?.alarms?.filter((alarm) => alarm.state !== "cleared").length ?? 0;
   let page;
   if (activeView === "siteOverview") page = <SiteOverviewPage data={data} state={state} error={error} />;
@@ -96,8 +105,14 @@ function AppShell() {
   if (activeView === "liveMonitoring") page = <LiveMonitoringPage data={data} state={state} error={error} />;
   if (activeView === "inverters") page = <InverterMonitoringPage data={data} state={state} error={error} />;
   if (activeView === "operations") page = <OperationsPage overview={data?.overview} fleet={data?.fleet} alarms={data?.alarms} recommendations={data?.recommendations} historian={data?.historian} state={state} error={error} />;
+  if (activeView === "operationsLog") page = <OperationsLogPage data={data} state={state} error={error} />;
+  if (activeView === "workOrders") page = <WorkOrdersPage data={data} state={state} error={error} onTransition={transitionWorkOrder} />;
   if (activeView === "dispatch") page = <DispatchPage recommendations={Array.isArray(data?.recommendations) ? data.recommendations : []} state={state} error={error} onApprove={recordApproval} onReject={recordRejection} onCommandResolved={updateDispatchCommand} />;
   if (activeView === "historian") page = <HistorianPage historian={data} state={state} error={error} rangeHours={rangeHours} onRangeChange={setRangeHours} />;
+  if (activeView === "siteEfficiency") page = <SiteEfficiencyPage data={data} state={state} error={error} />;
+  if (activeView === "inverterEfficiency") page = <InverterEfficiencyPage data={data} state={state} error={error} />;
+  if (activeView === "stringHealth") page = <StringHealthPage data={data} state={state} error={error} />;
+  if (activeView === "eventAnalysis") page = <EventAnalysisPage data={data} state={state} error={error} />;
 
   return <main className="scada-shell" aria-label={t("app.label")}><ScadaSidebar activeView={activeView} onSelect={setActiveView} alarmCount={alarmCount} /><section className="scada-app"><header className="scada-app__header"><div><p className="scada-eyebrow">{t("header.eyebrow", { site: "demo-v2g-site" })}</p><h1>{t(headings[activeView])}</h1></div><div><p className="scada-app__boundary">{t("header.liveSimulator")}</p><LanguageSwitcher /></div></header><div id={`panel-${activeView}`} aria-live="polite">{page}</div></section></main>;
 }

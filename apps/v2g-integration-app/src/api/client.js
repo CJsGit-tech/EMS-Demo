@@ -42,6 +42,13 @@ export const v2gApi = {
     query: { from, to, metric },
   }),
   getEvents: (filters = {}) => request(`/api/v1/sites/${SITE_ID}/events`, { query: filters }),
+  getWorkOrders: () => request(`/api/v1/sites/${SITE_ID}/work-orders`),
+  transitionWorkOrder: (workOrderId, { state, actor, reason }) => request(`/api/v1/work-orders/${workOrderId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state, actor, reason }),
+  }),
+  getAnalytics: ({ from, to }) => request(`/api/v1/sites/${SITE_ID}/analytics`, { query: { from, to } }),
   getHistorian: ({ from, to, metric = "power_kw" }) => request(`/api/v1/sites/${SITE_ID}/historian`, {
     query: { from, to, metric },
   }),

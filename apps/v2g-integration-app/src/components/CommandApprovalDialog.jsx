@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import "../styles.css";
 import { hasFutureExpiry, isApprovalEligible } from "./commandEligibility.js";
+import { useI18n } from "../i18n/I18nProvider.jsx";
 
 function getExpiryTimestamp(expiresAt) {
   if (typeof expiresAt !== "string" || expiresAt.trim().length === 0) {
@@ -18,6 +19,7 @@ function formatExpiry(expiresAt) {
 }
 
 export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
+  const { t } = useI18n();
   const dialogRef = useRef(null);
   const [reason, setReason] = useState("");
   const titleId = useId();
@@ -69,26 +71,26 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
 
   return (
     <dialog ref={dialogRef} className="scada-dialog" aria-labelledby={titleId} aria-describedby={descriptionId}>
-      <form className="scada-dialog__form" aria-label="Simulated command approval">
+      <form className="scada-dialog__form" aria-label={t("dispatch.dialogLabel")}>
         <p className="scada-eyebrow">Simulator-only recommendation</p>
-        <h2 id={titleId}>Approve simulated command</h2>
-        <p className="scada-dialog__intro" id={descriptionId}>This records a human decision in the local simulator only. It does not contact equipment, vehicles, or the grid.</p>
+        <h2 id={titleId}>{t("dispatch.approve")}</h2>
+        <p className="scada-dialog__intro" id={descriptionId}>{t("dispatch.dialogIntro")}</p>
         <dl className="scada-dialog__values">
           <div>
-            <dt>Expires at</dt>
+            <dt>{t("dispatch.expiry")}</dt>
             <dd>{formatExpiry(recommendation.expiresAt)}</dd>
           </div>
           <div>
-            <dt>Projected SOC</dt>
+            <dt>{t("dispatch.projectedSoc")}</dt>
             <dd>{recommendation.projectedSoc}{typeof recommendation.projectedSoc === "number" ? "%" : ""}</dd>
           </div>
           <div>
-            <dt>Impact</dt>
+            <dt>{t("dispatch.expectedImpact")}</dt>
             <dd>{recommendation.impactKw}{typeof recommendation.impactKw === "number" ? " kW" : ""}</dd>
           </div>
         </dl>
-        <section aria-label="Simulated command constraints">
-          <h3>Constraints</h3>
+        <section aria-label={t("dispatch.constraints")}>
+          <h3>{t("dispatch.constraints")}</h3>
           <ul className="scada-constraints">
             {recommendation.constraints.map((constraint) => (
               <li key={constraint}>{constraint}</li>
@@ -96,28 +98,28 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
           </ul>
         </section>
         <label className="scada-reason" htmlFor={reasonId}>
-          Operator reason
+          {t("dispatch.operatorReason")}
           <textarea
             id={reasonId}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Record why this simulated action is appropriate"
+            placeholder={t("dispatch.reasonPlaceholder")}
             required
           />
         </label>
         {!hasFutureExpiry(recommendation.expiresAt) ? (
           <p className="scada-expired" role="status">
             {isExpired
-              ? "This simulated recommendation has expired and cannot be actioned."
-              : "This simulated recommendation has no valid expiry and cannot be actioned."}
+              ? t("dispatch.expired")
+              : t("dispatch.invalidExpiry")}
           </p>
         ) : null}
         <div className="scada-dialog__actions">
           <button type="button" onClick={reject} disabled={!canAct}>
-            Reject simulated command
+            {t("dispatch.reject")}
           </button>
           <button type="button" className="scada-button--approve" onClick={approve} disabled={!canAct}>
-            Approve simulated command
+            {t("dispatch.approve")}
           </button>
         </div>
       </form>

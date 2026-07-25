@@ -79,8 +79,8 @@ test("opens the existing Operations workspace from the localized operations navi
 });
 
 test.each([
-  ["Approve", "approved", "/commands/cmd-014/approve"],
-  ["Reject", "rejected", "/commands/cmd-014/reject"],
+  ["核准模擬指令", "approved", "/commands/cmd-014/approve"],
+  ["拒絕模擬指令", "rejected", "/commands/cmd-014/reject"],
 ])("keeps the dispatch command callback wired for %s actions", async (action, state, endpoint) => {
   Object.defineProperties(HTMLDialogElement.prototype, {
     close: { configurable: true, value() { this.open = false; this.dispatchEvent(new Event("close")); } },
@@ -97,10 +97,10 @@ test.each([
   await screen.findAllByRole("heading", { name: "電站總覽" });
 
   await user.click(screen.getByRole("button", { name: "調度監督" }));
-  expect(await screen.findByRole("heading", { name: "Dispatch" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Approve simulated command" }));
-  fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "Record the simulator decision." } });
-  fireEvent.click(within(screen.getByRole("dialog", { name: "Approve simulated command" })).getByRole("button", { name: `${action} simulated command` }));
+  expect(await screen.findByRole("heading", { name: "調度" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "核准模擬指令" }));
+  fireEvent.change(screen.getByLabelText("操作人原因"), { target: { value: "Record the simulator decision." } });
+  fireEvent.click(within(screen.getByRole("dialog", { name: "核准模擬指令" })).getByRole("button", { name: action }));
 
   expect(await screen.findByText(state)).toBeVisible();
   expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([expect.stringContaining(endpoint)]));
