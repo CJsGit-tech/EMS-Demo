@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from v2g.models import Base, Evse, TelemetryPoint
-from v2g.seed import DEMO_SITE_ID, build_demo_fleet
+from v2g.seed import DEMO_SITE_ID, build_demo_fleet, seed_demo_fleet
 from v2g.simulator import FleetSimulator
 
 
@@ -100,3 +100,47 @@ def test_file_backed_sqlite_hides_uncommitted_row_from_separate_publication_read
             await engine.dispose()
 
     assert asyncio.run(observe_transaction_isolation()) == (0, 1)
+
+
+def test_seed_publishes_only_after_committed_data_is_visible_to_independent_reader(tmp_path):
+    async def observe_publication_boundary() -> tuple[int, list[tuple[int, int]]]:
+        database_path = tmp_path / "seed-publication.sqlite"
+        writer_engine = create_async_engine(
+            f"sqlite+aiosqlite:///{database_path}", pool_size=1
+        )
+        reader_engine = create_async_engine(
+            f"sqlite+aiosqlite:///{database_path}", pool_size=1
+        )
+        writer_sessions = async_sessionmaker(writer_engine, expire_on_commit=False)
+        reader_sessions = async_sessionmaker(reader_engine, expire_on_commit=False)
+        observed_counts: list[tuple[int, int]] = []
+        try:
+            async with writer_engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+
+            async def publish(_event):
+                async with reader_sessions() as reader:
+                    observed_counts.append(
+                        (
+                            await reader.scalar(select(func.count(Evse.asset_id))),
+                            await reader.scalar(
+                                select(func.count(TelemetryPoint.telemetry_id))
+                            ),
+                        )
+                    )
+
+            async with writer_sessions() as writer:
+                fleet = await seed_demo_fleet(writer, publish=publish)
+
+            return len(fleet.evses), observed_counts
+        finally:
+            await writer_engine.dispose()
+            await reader_engine.dispose()
+
+    evse_count, observed_counts = asyncio.run(observe_publication_boundary())
+
+    assert observed_counts
+    assert all(
+        observed == (evse_count, 5 * 30 * 24 * 4 + 3)
+        for observed in observed_counts
+    )
