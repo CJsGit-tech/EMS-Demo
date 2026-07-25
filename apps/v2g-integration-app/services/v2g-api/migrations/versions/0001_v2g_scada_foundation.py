@@ -122,10 +122,25 @@ def upgrade() -> None:
             FOR EACH ROW EXECUTE FUNCTION prevent_audit_record_mutation();
             """
         )
+        op.execute(
+            """
+            CREATE TRIGGER audit_records_prevent_truncate
+            BEFORE TRUNCATE ON audit_records
+            FOR EACH STATEMENT EXECUTE FUNCTION prevent_audit_record_mutation();
+            """
+        )
+        op.execute(
+            """
+            COMMENT ON TABLE audit_records IS
+            'Append-only audit trail. The runtime role must not own this table or have DDL, '
+            'trigger-management, or TRUNCATE privileges. Run migrations with a separate owner role.';
+            """
+        )
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
+        op.execute("DROP TRIGGER IF EXISTS audit_records_prevent_truncate ON audit_records")
         op.execute("DROP TRIGGER IF EXISTS audit_records_append_only ON audit_records")
         op.execute("DROP FUNCTION IF EXISTS prevent_audit_record_mutation()")
 
