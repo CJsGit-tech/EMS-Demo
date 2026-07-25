@@ -5,6 +5,7 @@ import { DiagnosticsPage } from "../src/features/overview/DiagnosticsPage.jsx";
 import { FleetOverviewPage } from "../src/features/overview/FleetOverviewPage.jsx";
 import { SiteOverviewPage } from "../src/features/overview/SiteOverviewPage.jsx";
 import { I18nProvider } from "../src/i18n/I18nProvider.jsx";
+import { PageState, Trend } from "../src/components/PageState.jsx";
 
 const overview = {
   simulated: true,
@@ -17,6 +18,9 @@ const overview = {
 function renderPage(page) {
   return render(<I18nProvider>{page}</I18nProvider>);
 }
+
+beforeEach(() => window.localStorage.clear());
+afterEach(() => vi.restoreAllMocks());
 
 test("renders the localized site overview operational panels as simulator data", () => {
   renderPage(
@@ -62,9 +66,9 @@ test("renders diagnostics freshness as an operational state", () => {
     <DiagnosticsPage
       data={{
         simulated: true,
-        observed_at: "2030-01-15T10:30:00.000Z",
+        observed_at: "2020-01-15T10:30:00.000Z",
         open_alarm_count: 1,
-        assets: [{ asset_id: "evse-03", communication_state: "Unavailable", latest_telemetry_at: "2030-01-15T10:00:00.000Z", telemetry_gap_minutes: 30, open_alarm_count: 1, freshness: "stale" }],
+        assets: [{ asset_id: "evse-03", communication_state: "Unavailable", latest_telemetry_at: "2020-01-15T10:00:00.000Z", telemetry_gap_minutes: 30, open_alarm_count: 1 }],
       }}
       state="ready"
     />,
@@ -73,6 +77,28 @@ test("renders diagnostics freshness as an operational state", () => {
   expect(screen.getByText("資料可能已過期")).toBeVisible();
   expect(screen.getByText("evse-03")).toBeVisible();
   expect(screen.getByText("30 分鐘")).toBeVisible();
+});
+
+test("derives stale diagnostics from the observed timestamp contract", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-15T10:40:01.000Z"));
+  renderPage(<DiagnosticsPage data={{ simulated: true, observed_at: "2030-01-15T10:30:00.000Z", assets: [] }} state="ready" />);
+
+  expect(screen.getByText("資料可能已過期")).toBeVisible();
+});
+
+test("keeps the Chinese error state while exposing a server detail", () => {
+  renderPage(<PageState state="error" error="Simulator request failed (503)." />);
+
+  expect(screen.getByText("無法載入模擬資料。")).toBeVisible();
+  expect(screen.getByText("Simulator request failed (503).")).toBeVisible();
+});
+
+test("localizes the trend SVG name for an English workspace", () => {
+  window.localStorage.setItem("v2g-scada-locale", "en");
+  renderPage(<Trend title="Site power trend" points={[{ value: 18 }]} />);
+
+  expect(screen.getByRole("img", { name: "Site power trend chart" })).toBeVisible();
+  window.localStorage.clear();
 });
 
 test.each([

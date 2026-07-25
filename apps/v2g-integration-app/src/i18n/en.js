@@ -58,6 +58,7 @@ export default {
   "trend.sitePower": "Site power trend",
   "trend.liveSitePower": "Live site power trend",
   "trend.inverterPower": "{asset} power trend",
+  "trend.chartLabel": "{title} chart",
   "event.severity": "Severity",
   "event.state": "State",
   "event.asset": "Asset",

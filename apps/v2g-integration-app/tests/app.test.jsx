@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "../src/App.jsx";
@@ -16,10 +16,11 @@ const responses = {
   trend: { simulated: true, points: [{ observed_at: "2030-01-15T10:30:00Z", value: 18 }] },
 };
 
-function stubApi() {
-  vi.stubGlobal("fetch", vi.fn((url) => {
+function stubApi(overrides = {}) {
+  const fetchMock = vi.fn((url) => {
     const path = String(url);
-    const response = path.includes("/diagnostics") ? responses.diagnostics
+    const response = path.includes("/commands/") ? { command_id: "cmd-014", state: path.includes("/approve") ? "approved" : "rejected" }
+      : path.includes("/diagnostics") ? responses.diagnostics
       : path.includes("/inverters/") ? responses.trend
         : path.includes("/inverters") ? responses.inverters
           : path.includes("/events") ? responses.events
@@ -27,8 +28,10 @@ function stubApi() {
               : path.includes("/fleet") ? responses.fleet
                 : path.includes("/recommendations") ? responses.recommendations
                   : path.includes("/alarms") ? responses.alarms : responses.historian;
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(response) });
-  }));
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(overrides[path.includes("/recommendations") ? "recommendations" : "command"] ?? response) });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -60,4 +63,32 @@ test("keeps direct keyboard focus on each real selected navigation view", async 
   await user.keyboard("{Enter}");
   expect((await screen.findAllByRole("heading", { name: "診斷" }))[0]).toBeVisible();
   expect(diagnostics).toHaveFocus();
+});
+
+test.each([
+  ["Approve", "approved", "/commands/cmd-014/approve"],
+  ["Reject", "rejected", "/commands/cmd-014/reject"],
+])("keeps the dispatch command callback wired for %s actions", async (action, state, endpoint) => {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    close: { configurable: true, value() { this.open = false; this.dispatchEvent(new Event("close")); } },
+    showModal: { configurable: true, value() { this.open = true; } },
+  });
+  const fetchMock = stubApi({
+    recommendations: {
+      simulated: true,
+      recommendations: [{ command_id: "cmd-014", state: "awaiting_approval", expires_at: "2030-01-15T10:30:00Z", projected_soc_percent: 74, power_kw: -32, constraints: ["Reserve SOC remains above 35%"], reason: "Bounded simulator recommendation" }],
+    },
+  });
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findAllByRole("heading", { name: "電站總覽" });
+
+  await user.click(screen.getByRole("button", { name: "調度監督" }));
+  expect(await screen.findByRole("heading", { name: "Dispatch" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Approve simulated command" }));
+  fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "Record the simulator decision." } });
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Approve simulated command" })).getByRole("button", { name: `${action} simulated command` }));
+
+  expect(await screen.findByText(state)).toBeVisible();
+  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([expect.stringContaining(endpoint)]));
 });

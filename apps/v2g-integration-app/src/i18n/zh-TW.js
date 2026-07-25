@@ -58,6 +58,7 @@ export default {
   "trend.sitePower": "站點功率趨勢",
   "trend.liveSitePower": "即時站點功率趨勢",
   "trend.inverterPower": "{asset} 功率趨勢",
+  "trend.chartLabel": "{title}圖",
   "event.severity": "嚴重度",
   "event.state": "狀態",
   "event.asset": "資產",
