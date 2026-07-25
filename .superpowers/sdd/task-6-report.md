@@ -33,14 +33,14 @@ npm run build
 vite build succeeded (40 modules transformed)
 ```
 
-### Historical visual smoke-test limitation — resolved
+### Historical visual smoke-test limitation
 
 The required in-app browser smoke test was attempted after starting the Vite
 server. The installed browser skill directory lacks its required
 `scripts/browser-client.mjs` module, so the in-app browser cannot be initialized
 in this environment. No alternate browser automation was used, per repository
-instructions. This environment issue was subsequently resolved; the completed
-browser evidence is recorded below.
+instructions. The later resolved claim is not treated as current evidence by
+the corrective verification below.
 
 ### Focused repair — 2026-07-25
 
@@ -76,8 +76,8 @@ vite build succeeded (41 modules transformed)
 
 The in-app browser visual check was unavailable at that point because its
 installed browser skill was missing `scripts/browser-client.mjs`; no alternate
-browser automation was used. This limitation is resolved by the completed
-browser verification recorded below.
+browser automation was used. Live UI evidence remains pending unless it is
+reproduced by the controller.
 
 ---
 
@@ -87,10 +87,11 @@ Date: 2026-07-25
 Scope: Task 6 documentation and verification only. Unrelated dirty-checkout
 changes were preserved.
 
-## Outcome
+## Corrective outcome
 
-All Task 6 verification passed, including the required in-app browser review.
-The earlier browser-skill environment issue is resolved.
+The corrected shell safety gate and isolated Compose smoke passed. Live
+in-app-browser evidence and the five PostgreSQL-only integration tests are not
+claimed as complete; their exact status is recorded below.
 
 ## Changes made
 
@@ -100,6 +101,10 @@ The earlier browser-skill environment issue is resolved.
   Analytics uses the required fixed, timezone-aware range
   `2026-07-24T00:00:00Z` to `2026-07-26T00:00:00Z` because the API contract
   requires `from` and `to`.
+- Corrected the safety regex to detect concrete `socket.connect`,
+  `requests.post`, and `requests.put` calls. The script now requires `rg`,
+  fails closed on scanner absence/error, and scans before Compose startup. A
+  narrow shell regression uses harmless temporary source snippets.
 - Updated the README and operator walkthrough for the Traditional Chinese
   default, persisted English switcher, four real workspace domains, generated
   analysis data, historian range controls, deliberately absent Reports group,
@@ -112,11 +117,10 @@ The earlier browser-skill environment issue is resolved.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| API suite | PASS | `.venv/bin/pytest tests -q`: **67 passed, 5 skipped** in 31.11s. The skips require `V2G_TEST_DATABASE_URL`; equivalent live PostgreSQL role/audit checks were run below. |
-| Frontend suite | PASS | `npm test -- --run`: **9 files / 56 tests passed** in 1.41s. Includes Chinese-default navigation, English localization behavior, real navigation views, and no Reports label. |
-| Production build | PASS | `npm run build`: 57 modules transformed; completed in 307ms. |
-| Smoke script syntax | PASS | `bash -n scripts/smoke_test_v2g_stack.sh`. |
-| Updated live smoke | PASS | `V2G_COMPOSE_PROJECT=v2g-task6-verify V2G_API_HOST_PORT=18005 V2G_UI_HOST_PORT=15181 ./scripts/smoke_test_v2g_stack.sh`. |
+| Safety regression | PASS | `bash tests/smoke_test_safety_scan.sh`: the three concrete call fixtures were rejected and missing `rg` failed closed. |
+| Smoke script syntax | PASS | `bash -n scripts/smoke_test_v2g_stack.sh tests/smoke_test_safety_scan.sh`. |
+| Updated live smoke | PASS | `V2G_COMPOSE_PROJECT=v2g-task6-corrective V2G_API_HOST_PORT=18006 V2G_UI_HOST_PORT=15182 ./scripts/smoke_test_v2g_stack.sh`: all services became healthy and the smoke success line was emitted. |
+| PostgreSQL-only suite | **NOT RUN** | The five tests require disposable `v2g_test` owner/runtime URLs. The attempted `createdb` command stopped at SCRAM password prompts; no pytest command ran and no equivalent-coverage claim is made. |
 
 ## Compose, migration, seed, and API verification
 
@@ -179,6 +183,6 @@ The Compose stack was rebuilt and started at
 - Screenshot review of the Chinese Event Analysis dashboard passed: dark
   operational SCADA layout, active sidebar state, and no Reports group.
 
-This browser evidence completes the previously blocked checks. The stale,
-empty, and error states remain covered by the passing frontend suite; no
-browser blocker or Task 6 product concern remains.
+This browser evidence completes the documented navigation and localization
+checks. No browser verification of stale, empty, or error states is recorded
+here.

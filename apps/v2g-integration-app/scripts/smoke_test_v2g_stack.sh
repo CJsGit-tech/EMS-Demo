@@ -17,6 +17,26 @@ if [[ $# -gt 0 ]]; then
   exit 2
 fi
 
+# OCPP-shaped local event names are intentional; external control transports
+# are not. Require the scanner and reject matches before starting the stack.
+if ! command -v rg >/dev/null 2>&1; then
+  echo "Required safety scanner 'rg' is unavailable; refusing to run the V2G smoke test." >&2
+  exit 1
+fi
+
+if rg --line-number --pcre2 \
+  'websocket|socket[.]connect|requests[.](?:post|put)' \
+  "$project_root/services/v2g-api/src"; then
+  echo "External-control transport pattern found in simulator API source." >&2
+  exit 1
+else
+  safety_scan_status=$?
+  if [[ "$safety_scan_status" -ne 1 ]]; then
+    echo "External-control safety scan failed with rg exit status $safety_scan_status; refusing to start the V2G stack." >&2
+    exit 1
+  fi
+fi
+
 # Compose waits on declared health checks; it does not use a time-based sleep.
 "${compose[@]}" up --wait --no-recreate --wait-timeout "$timeout_seconds"
 
@@ -31,12 +51,5 @@ ui="$(curl --fail --silent --show-error "http://127.0.0.1:${ui_host_port}/")"
 [[ "$analytics" == *'"site_id":"demo-v2g-site"'* ]]
 [[ "$diagnostics" == *'"site_id":"demo-v2g-site"'* ]]
 [[ "$ui" == *'V2G SCADA'* ]]
-
-# OCPP-shaped local event names are intentional; external control transports
-# are not. Fail closed if the simulator API acquires one of these patterns.
-if rg --line-number --pcre2 'websocket|socket\\.connect|requests\\.(post|put)' "$project_root/services/v2g-api/src"; then
-  echo "External-control transport pattern found in simulator API source." >&2
-  exit 1
-fi
 
 printf 'V2G simulator smoke passed: API healthy; demo overview, analytics, and diagnostics returned; UI identifies V2G SCADA; no external-control transport pattern found.\n'
