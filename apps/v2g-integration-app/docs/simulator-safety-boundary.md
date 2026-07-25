@@ -32,6 +32,15 @@ authorization system. The API has no authentication or role enforcement. A
 non-empty `actor` in an approval or rejection is audit metadata, not verified
 identity. Run this stack only in a trusted local development environment.
 
+The API runs with the restricted `v2g_runtime` database role. That role may
+read the seeded workspace and can invoke the owner-defined simulated
+work-order transition function, but it cannot directly update, delete, or
+truncate `work_orders` or `work_order_events`. Each permitted work-order
+transition requires a non-empty actor and reason and appends a local event.
+Those database controls protect the demo's audit shape; they do not turn the
+actor field into authentication, authorize a real operator, or permit any
+external command.
+
 ## Task 8 acceptance status
 
 - [x] **No endpoint connects to an external OCPP, EVSE, vehicle, or utility
@@ -65,6 +74,11 @@ cancellation, expiry, and policy failures are terminal outcomes.
 The deployed API can create a command and record `approved` or `rejected`.
 It publishes one normalized SSE notification per observed command state in a
 bounded, in-memory journal. It does not call a device after approval.
+
+The separate work-order UI changes only seeded simulator records for
+`demo-v2g-site`. Its database-backed transition and event record are local to
+the Compose volume, and no work-order state means an alarm has been repaired
+or an external asset has been touched.
 
 ## Release gate for any real integration
 

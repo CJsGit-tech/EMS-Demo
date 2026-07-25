@@ -23,8 +23,10 @@ V2G_COMPOSE_PROJECT=v2g-local-simulator ./scripts/smoke_test_v2g_stack.sh
 The smoke script waits on Compose health checks and then verifies:
 
 - `http://localhost:8005/healthz` returns an `ok` status;
-- the `demo-v2g-site` overview is available; and
-- `http://localhost:5181/` returns HTTP 200.
+- the fixed `demo-v2g-site` overview, analytics, and diagnostics responses are
+  available;
+- `http://localhost:5181/` identifies the V2G SCADA UI; and
+- the API source has no external-control transport pattern.
 
 Open `http://localhost:5181/`. The header must say `SIMULATOR · NO EXTERNAL
 CONTROL`. If it does not, stop and verify that you are using this local stack.
@@ -32,10 +34,25 @@ CONTROL`. If it does not, stop and verify that you are using this local stack.
 **Current smoke status:** the read-only UI container runs Nginx on port 8080
 with its temporary paths under `/tmp`, which Compose mounts as `tmpfs`. The
 smoke check is valid for this configuration and verifies the API health check,
-the seeded overview, and the UI HTTP 200 response. Do not treat a healthy API
-alone as a successful stack startup.
+the seeded overview/analytics/diagnostics responses, the UI identity, and the
+source safety scan. Do not treat a healthy API alone as a successful stack
+startup.
 
-## 2. Read Operations, Fleet, and Historian data
+## 2. Set the language and choose a workspace
+
+On first use the sidebar and site overview open in Traditional Chinese. Use the
+header **語言** control to select **English**, then select **繁體中文** to return;
+the choice is retained only in that browser's local storage.
+
+The sidebar has exactly four functional groups: **總覽** (Overview), **監控**
+(Monitoring), **維運** (Operations), and **分析** (Analytics). Navigate their
+real views to inspect simulator data: site/fleet/diagnostics, events/live
+monitoring/inverters, operations/work orders/dispatch, and historian/site
+efficiency/inverter efficiency/string health/event analysis. There is no
+Reports group or Reports route. Reports are deliberately outside this local
+simulator's scope.
+
+## 3. Read Operations, Fleet, and Historian data
 
 Start in **Operations**. `Site power` and `Flexible capacity` are calculated
 from deterministic demo data. The `Observed` timestamp comes from
@@ -63,7 +80,13 @@ quality. The current seed does not automatically turn stale as time passes;
 there is no wall-clock staleness threshold. When you see a stale warning,
 review the timestamp and do not rely on the value for a real-world decision.
 
-## 3. Review alarms
+The analysis views are generated from the deterministic seeded records: five
+inverter readings and forty string readings for `demo-v2g-site`, plus the
+simulated alarm events in the chosen range. They are calculations over demo
+data, not measured performance. The historian range control offers 6, 24, and
+72 hours; choose a range before interpreting a trend or any truncation notice.
+
+## 4. Review alarms
 
 Open **Alarms** to view simulator alarm state, severity, source, message, and
 raised time. The default seed produces two open scenarios:
@@ -84,7 +107,7 @@ read-only. If you review an alarm during a demo, record that review in your
 team's external demo notes; do not imply that the simulator has acknowledged,
 silenced, or corrected an alarm.
 
-## 4. Review a dispatch recommendation
+## 5. Review a dispatch recommendation
 
 Open **Dispatch**. The API returns a `proposed` recommendation with:
 
@@ -99,7 +122,24 @@ does not carry a `command_id` or projected SOC, so the UI presents it as
 advisory and disables `Approve simulated command`. This is the expected,
 fail-closed behavior for the shipped local stack.
 
-## 5. Understand the local command workflow
+## 6. Update a simulated work order
+
+Open **工作單** (Work orders) under **維運**. The seeded rows are local simulator
+records. To change a row, supply both a named actor and a non-empty reason,
+then use the displayed transition action:
+
+```text
+open → in_progress → completed
+                    ↘ open
+```
+
+The API permits these transitions only for `demo-v2g-site`. It records the
+actor, reason, prior state, and next state in an append-only local work-order
+event. Direct runtime-role updates are not permitted. This audit trail is for
+the simulator database only; it does not authenticate the named actor and it
+does not control, repair, acknowledge, or contact equipment.
+
+## 7. Understand the local command workflow
 
 The HTTP contract supports a separately created local command. A valid
 `POST /api/v1/commands` supplies the demo site ID, power, projected SOC,
@@ -129,7 +169,7 @@ The command state and audit events are process-local and disappear on API
 restart. There is no command audit retrieval API. The separately tested
 PostgreSQL append-only audit repository does not currently back these routes.
 
-## 6. Reset the demo
+## 8. Reset the demo
 
 To remove the containers, networks, and named PostgreSQL volume, run:
 

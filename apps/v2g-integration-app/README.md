@@ -29,7 +29,8 @@ check is [http://localhost:8005/healthz](http://localhost:8005/healthz).
 > **Current smoke status:** The read-only UI container runs Nginx on port 8080
 > with its temporary paths under `/tmp`; Compose mounts `/tmp` as `tmpfs`.
 > The smoke check is valid for this configuration and verifies API health, the
-> seeded overview, and a UI HTTP 200 response.
+> seeded overview/analytics/diagnostics responses, the V2G SCADA UI identity,
+> and the simulator API's external-transport safety scan.
 
 ## What the stack contains
 
@@ -50,7 +51,9 @@ and seeds deterministic demo data before the API starts.
 
 Use a project name to keep this demo separate from other Compose stacks. The
 smoke script waits for Compose health checks, verifies the API health endpoint
-and demo overview, and requires the UI to return HTTP 200.
+plus the fixed demo site's overview, analytics, and diagnostics responses,
+verifies that the UI identifies itself as V2G SCADA, and rejects
+external-control transport patterns in the simulator API source.
 
 ```bash
 # Start or rebuild the stack, then wait for all service health checks.
@@ -86,6 +89,20 @@ The simulator produces deterministic status, transaction, meter, and
 smart-charging-result events for a given seed and timestamp. It does not poll,
 listen to, or command a real charger.
 
+## Workspace language and scope
+
+On a browser with no saved preference, the workspace opens in Traditional
+Chinese. Use the header language control to switch to English or back to
+Traditional Chinese; the selected locale is retained in that browser's local
+storage. The four supported navigation domains are **Overview**,
+**Monitoring**, **Operations**, and **Analytics**. They contain the real
+simulator views, including diagnostics, event and inverter monitoring,
+simulated work orders, dispatch advice, historian ranges, and deterministic
+analysis of five inverters and forty strings.
+
+Reports are deliberately out of scope for this simulator. No Reports group or
+route is rendered; do not use this demo as a source for production reporting.
+
 ## Operator workflow
 
 Use the console to review simulated telemetry, fleet availability, alarms,
@@ -97,6 +114,10 @@ The API also exposes local command request, approval, and rejection endpoints
 for contract testing. They enforce capacity, projected SOC, expiry, a named
 actor, and a non-empty reason. Their states and the present UI limitation are
 described in [the operator walkthrough](docs/operator-walkthrough.md).
+
+Work-order state changes are a separate local workflow. A transition requires
+a non-empty actor and reason, is restricted to the seeded demo site, and is
+recorded as a simulated work-order event. It never sends an equipment command.
 
 ## Data freshness, quality, and alarms
 
