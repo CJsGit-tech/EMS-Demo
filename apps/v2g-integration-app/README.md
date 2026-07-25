@@ -26,11 +26,10 @@ V2G_COMPOSE_PROJECT=v2g-local-simulator ./scripts/smoke_test_v2g_stack.sh
 Open [the local operator UI](http://localhost:5181). The local API health
 check is [http://localhost:8005/healthz](http://localhost:8005/healthz).
 
-> **Current readiness blocker:** Task 8 validation found that the current
-> read-only UI container exits before serving the UI because Nginx attempts to
-> create its default `fastcgi_temp` directory under `/var/cache/nginx`. The API
-> starts and becomes healthy, but the smoke check cannot pass until the
-> Docker/Nginx configuration routes that directory to writable `tmpfs` storage.
+> **Current smoke status:** The read-only UI container runs Nginx on port 8080
+> with its temporary paths under `/tmp`; Compose mounts `/tmp` as `tmpfs`.
+> The smoke check is valid for this configuration and verifies API health, the
+> seeded overview, and a UI HTTP 200 response.
 
 ## What the stack contains
 

@@ -29,11 +29,11 @@ The smoke script waits on Compose health checks and then verifies:
 Open `http://localhost:5181/`. The header must say `SIMULATOR · NO EXTERNAL
 CONTROL`. If it does not, stop and verify that you are using this local stack.
 
-**Current readiness blocker:** the current read-only UI container exits before
-the UI serves because Nginx still uses its default
-`/var/cache/nginx/fastcgi_temp` directory. The API can become healthy, but the
-smoke check fails until Docker/Nginx routes that directory to writable `tmpfs`
-storage. Do not treat a healthy API alone as a successful stack startup.
+**Current smoke status:** the read-only UI container runs Nginx on port 8080
+with its temporary paths under `/tmp`, which Compose mounts as `tmpfs`. The
+smoke check is valid for this configuration and verifies the API health check,
+the seeded overview, and the UI HTTP 200 response. Do not treat a healthy API
+alone as a successful stack startup.
 
 ## 2. Read Operations, Fleet, and Historian data
 
