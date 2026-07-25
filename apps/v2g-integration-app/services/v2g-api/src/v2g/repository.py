@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from v2g.models import AuditRecord, Base
+from v2g.models import AuditRecord, Base, Evse
 
 
 class V2GRepository:
@@ -40,6 +40,14 @@ class V2GRepository:
 
     async def dispose(self) -> None:
         await self._engine.dispose()
+
+    async def count_evses(self, site_id: str) -> int:
+        """Return the number of simulator EVSEs provisioned for a site."""
+        async with self._sessions() as session:
+            count = await session.scalar(
+                select(func.count()).select_from(Evse).where(Evse.site_id == site_id)
+            )
+        return int(count or 0)
 
     async def append_audit(
         self, command_id: str, event_type: str, payload: dict[str, Any]

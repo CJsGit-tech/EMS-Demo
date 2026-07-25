@@ -120,9 +120,12 @@ async def seed_demo_fleet(
         )
         if existing_asset is not None:
             return fleet
+        # Flush principals before dependent rows.  SQLite's default test setup
+        # does not enforce foreign keys, whereas PostgreSQL correctly does.
+        session.add_all(fleet.evses)
+        await session.flush()
         session.add_all(
             [
-                *fleet.evses,
                 *fleet.sessions,
                 *fleet.telemetry_points,
                 *fleet.alarms,
