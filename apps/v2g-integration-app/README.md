@@ -1,27 +1,135 @@
 # V2G SCADA simulator
 
-This is an isolated, local-only V2G simulator. It does not connect to an
-OCPP server, EVSE, vehicle, utility, or any other external control system.
+> A local, deterministic V2G SCADA demo for reviewing simulated fleet data and recording local command decisions. It never controls equipment.
 
-## Run the local stack
+## Safety boundary
 
-Docker Compose builds the React UI, API, and an isolated PostgreSQL database.
-The API applies asynchronous Alembic migrations and inserts the deterministic
-five-EVSE demo seed before it starts serving requests.
+This application is a simulator, not an EV charging management system. It has
+no external OCPP, EVSE, vehicle, utility, grid, or market connection, and it
+does not implement OCPP or any other protocol transport. The OCPP-shaped event
+labels describe local test data only.
+
+The UI and API bind only to the local machine. See
+[the simulator safety boundary](docs/simulator-safety-boundary.md) before you
+run it or interpret its output.
+
+## Quick start
+
+You need Docker Desktop (or Docker Engine) with Docker Compose v2. From this
+directory, start the isolated stack and run its smoke check:
 
 ```bash
-cd apps/v2g-integration-app
 V2G_COMPOSE_PROJECT=v2g-local-simulator docker compose --project-name v2g-local-simulator up --build -d
 V2G_COMPOSE_PROJECT=v2g-local-simulator ./scripts/smoke_test_v2g_stack.sh
 ```
 
-Open the UI at http://localhost:5181 and the API health endpoint at
-http://localhost:8005/healthz. Both ports are bound to `127.0.0.1` only. The
-browser uses same-origin API paths; the UI container proxies them to the
-internal Compose API hostname, so no host-only API configuration is needed.
+Open [the local operator UI](http://localhost:5181). The local API health
+check is [http://localhost:8005/healthz](http://localhost:8005/healthz).
 
-Tear down the isolated stack and its demo database when finished:
+> **Current readiness blocker:** Task 8 validation found that the current
+> read-only UI container exits before serving the UI because Nginx attempts to
+> create its default `fastcgi_temp` directory under `/var/cache/nginx`. The API
+> starts and becomes healthy, but the smoke check cannot pass until the
+> Docker/Nginx configuration routes that directory to writable `tmpfs` storage.
+
+## What the stack contains
+
+Docker Compose starts four local services:
+
+| Service | Purpose | Host access |
+| --- | --- | --- |
+| `v2g-scada` | React operator UI served by Nginx | `127.0.0.1:5181` |
+| `api` | FastAPI simulator API | `127.0.0.1:8005` |
+| `migrator` | Applies migrations and seeds the demo database before the API starts | No published host port |
+| `postgres` | Demo seed and schema storage | No published host port |
+
+The browser uses same-origin `/api` paths. Nginx proxies those requests only
+to the internal Compose API hostname. The one-shot migrator applies migrations
+and seeds deterministic demo data before the API starts.
+
+## Run, reset, and stop
+
+Use a project name to keep this demo separate from other Compose stacks. The
+smoke script waits for Compose health checks, verifies the API health endpoint
+and demo overview, and requires the UI to return HTTP 200.
 
 ```bash
+# Start or rebuild the stack, then wait for all service health checks.
+V2G_COMPOSE_PROJECT=v2g-local-simulator docker compose --project-name v2g-local-simulator up --build -d
+
+# Verify the running stack.
+V2G_COMPOSE_PROJECT=v2g-local-simulator ./scripts/smoke_test_v2g_stack.sh
+
+# Remove containers, networks, and the named demo database volume.
 V2G_COMPOSE_PROJECT=v2g-local-simulator ./scripts/smoke_test_v2g_stack.sh --teardown
 ```
+
+After teardown, starting the stack again creates and seeds a new local demo
+database. Do not use these commands against a production Compose project.
+
+## Demo data and scenarios
+
+The only site is `demo-v2g-site`. Its deterministic seed contains:
+
+- Five EVSEs: `evse-01` through `evse-05`.
+- Three active charging sessions and one unplugged session.
+- Thirty days of `power_kw` history, sampled every 15 minutes for each EVSE
+  (14,400 historical points), plus three current meter points from the seed
+  tick.
+- An unavailable `evse-03` with a simulated communications-loss condition.
+- A simulated smart-charging rejection caused by a site load limit.
+
+The historian API accepts timezone-aware `from` and `to` values and returns at
+most 1,000 points. A response sets `truncated` when the requested range exceeds
+that response limit. The UI offers 6-, 24-, and 72-hour windows.
+
+The simulator produces deterministic status, transaction, meter, and
+smart-charging-result events for a given seed and timestamp. It does not poll,
+listen to, or command a real charger.
+
+## Operator workflow
+
+Use the console to review simulated telemetry, fleet availability, alarms,
+historian data, and dispatch advice. The currently shipped recommendation is
+an advisory record with status `proposed`; it is not a pending command and its
+button is disabled by design.
+
+The API also exposes local command request, approval, and rejection endpoints
+for contract testing. They enforce capacity, projected SOC, expiry, a named
+actor, and a non-empty reason. Their states and the present UI limitation are
+described in [the operator walkthrough](docs/operator-walkthrough.md).
+
+## Data freshness, quality, and alarms
+
+`data_freshness.observed_at` identifies the source timestamp shown in the
+Operations view. The API exposes only `good` and `stale` quality values. The
+seed returns `good` data; it does not calculate staleness from wall-clock time.
+Treat it as demo data, never as current operational telemetry.
+
+Alarm entries are read-only simulator output. They can be `open` or `cleared`;
+the UI has no acknowledgement action. See the walkthrough for the exact alarm
+scenarios and how to record an operator review without claiming a state change.
+
+## Local validation
+
+Run the frontend checks from this directory:
+
+```bash
+npm test -- --run
+npm run build
+```
+
+Run the API tests from the API directory. The repository's virtual environment
+contains the declared Python dependencies:
+
+```bash
+cd services/v2g-api
+.venv/bin/pytest tests -q
+```
+
+## Documentation
+
+- [Simulator safety boundary](docs/simulator-safety-boundary.md): scope,
+  network limits, acceptance status, and known readiness limits.
+- [Operator walkthrough](docs/operator-walkthrough.md): local startup, data
+  interpretation, alarms, and the request/approve/reject workflow.
