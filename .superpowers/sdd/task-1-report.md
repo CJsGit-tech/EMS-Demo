@@ -49,7 +49,7 @@ The only test warning is a pre-existing FastAPI/Starlette `TestClient` deprecati
 ## Commits
 
 - Implementation commit: `79baa7b` (`feat(agentcrew): add GPT streaming supervisor`).
-- Report commit: recorded after this report is staged.
+- Initial report commit: `d50d2cb` (`docs(agentcrew): record GPT supervisor task report`).
 
 ## Concerns
 
