@@ -14,9 +14,15 @@ function pluralizedCount(count, singular, plural = `${singular}s`) {
 }
 
 function providerLabel(provider, t) {
+  if (!provider) return "GPT-5 mini";
   if (provider?.model === "gpt-5-mini") return "GPT-5 mini";
   if (typeof provider?.model === "string") return provider.model;
   return provider?.mode === "deterministic-fixtures" ? t("agentCrewDemoMode") : "";
+}
+
+function streamedProvider(run) {
+  if (run?.provider) return run.provider;
+  return run?.streamEvents?.find((event) => event?.type === "run.started")?.data?.provider || null;
 }
 
 export default function AgentCrewDrawer({ siteContext, onClose, t: externalTranslator }) {
@@ -24,6 +30,7 @@ export default function AgentCrewDrawer({ siteContext, onClose, t: externalTrans
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [run, setRun] = useState(null);
+  const [streamProvider, setStreamProvider] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [showAudit, setShowAudit] = useState(false);
@@ -51,12 +58,14 @@ export default function AgentCrewDrawer({ siteContext, onClose, t: externalTrans
     const text = nextMessage.trim();
     if (!text || isRunning) return;
     setMessage("");
+    setStreamProvider(null);
     let receivedAssistantDelta = false;
     setMessages((current) => [...current, { role: "user", text }, { role: "assistant", text: "", streaming: true }]);
     setRun({ requestMessage: text, status: "running", events: [], activities: [], citations: [], assistantText: "", steps: [], evidence: [], limitations: [], provenance: null });
     setIsRunning(true);
     try {
       const result = await createAgentCrewRun(siteContext, text, (event) => {
+        if (event.type === "run.started" && event.data?.provider) setStreamProvider(event.data.provider);
         setRun((current) => reduceAgentCrewStreamEvent(current, event));
         if (event.type === "assistant.delta" && typeof event.data?.delta === "string") {
           receivedAssistantDelta = true;
@@ -194,11 +203,11 @@ export default function AgentCrewDrawer({ siteContext, onClose, t: externalTrans
           </div>
         ) : (
           <div className="agentcrew-message-list">
-            {messages.map((item, index) => <div className={`agentcrew-message ${item.role}`} key={`${item.role}-${index}`}><span>{item.role === "user" ? "You" : "AgentCrew"}</span><p>{item.text || (item.streaming ? t("agentCrewStreaming") : "")}</p></div>)}
+            {messages.map((item, index) => <div className={`agentcrew-message ${item.role}`} key={`${item.role}-${index}`}><span>{item.role === "user" ? "You" : "AgentCrew"}</span>{item.role === "assistant" && item.streaming ? <small>{providerLabel(streamProvider || streamedProvider(run), t)}</small> : null}<p>{item.text || (item.streaming ? t("agentCrewStreaming") : "")}</p></div>)}
           </div>
         )}
 
-        {isRunning ? <div className="agentcrew-running" role="status"><Clock3 size={15} /><span>{t("agentCrewRouting")}{providerLabel(run?.provider, t) ? ` · ${providerLabel(run.provider, t)}` : ""}</span></div> : null}
+        {isRunning ? <div className="agentcrew-running" role="status"><Clock3 size={15} /><span>{t("agentCrewRouting")}{providerLabel(streamProvider || streamedProvider(run), t) ? ` · ${providerLabel(streamProvider || streamedProvider(run), t)}` : ""}</span></div> : null}
 
         {run ? (
           <section className="agentcrew-run-card">
@@ -210,8 +219,8 @@ export default function AgentCrewDrawer({ siteContext, onClose, t: externalTrans
               <>
                 <div id="agentcrew-run-details" className="agentcrew-run-details">
                 <div className="agentcrew-run-events">
-                  {providerLabel(run.provider, t) ? <div className="agentcrew-run-event"><Check size={14} /><span>{t("agentCrewProvider")}: {providerLabel(run.provider, t)}</span></div> : null}
-                  {(run.events || []).map((event, index) => <div className="agentcrew-run-event" key={`${event.kind}-${index}`}><Check size={14} /><span>{event.label}</span></div>)}
+                  {providerLabel(streamProvider || streamedProvider(run), t) ? <div className="agentcrew-run-event"><Check size={14} /><span>{t("agentCrewProvider")}: {providerLabel(streamProvider || streamedProvider(run), t)}</span></div> : null}
+                  {(run.events || []).filter((event) => !["tool.call", "web_search.started", "web_search.completed"].includes(event.kind)).map((event, index) => <div className="agentcrew-run-event" key={`${event.kind}-${index}`}><Check size={14} /><span>{event.label}</span></div>)}
                 </div>
                 {run.activities?.length ? <section className="agentcrew-mission-section" aria-labelledby="agentcrew-activity-title"><div className="agentcrew-section-heading"><span className="agentcrew-section-kicker">Live activity</span><h3 id="agentcrew-activity-title">{t("agentCrewActivity")}</h3></div><ul className="agentcrew-evidence-list">{run.activities.map((activity) => <li key={activity.id}><strong>{activity.label}</strong></li>)}</ul></section> : null}
                 {run.citations?.length ? <section className="agentcrew-mission-section" aria-labelledby="agentcrew-citations-title"><div className="agentcrew-section-heading"><span className="agentcrew-section-kicker">Web grounding</span><h3 id="agentcrew-citations-title">{t("agentCrewCitations")}</h3></div><ul className="agentcrew-evidence-list">{run.citations.map((citation) => <li key={citation.url}><a href={citation.url} target="_blank" rel="noreferrer">{citation.title}</a></li>)}</ul></section> : null}

@@ -18,16 +18,18 @@ class Settings:
     service_token: str = os.getenv("EMS_SERVICE_TOKEN", "local-ems-service-token")
     allowed_origins: tuple[str, ...] = tuple(_csv(os.getenv("EMS_ALLOWED_ORIGINS", "http://localhost:5175,http://127.0.0.1:5175")))
     allowed_headers: tuple[str, ...] = tuple(_csv(os.getenv("EMS_ALLOWED_HEADERS", "content-type,idempotency-key,x-correlation-id,x-ems-service-token,x-user-id")))
-    provider_mode: str = os.getenv("EMS_PROVIDER_MODE", "openai" if os.getenv("OPENAI_API_KEY") else "deterministic-fixtures")
+    # Production must be explicit about using OpenAI. Fixtures are an opt-in
+    # test/demo mode via EMS_PROVIDER_MODE=deterministic-fixtures.
+    provider_mode: str = os.getenv("EMS_PROVIDER_MODE", "openai")
     # Fixture data is only a local/dev mode. Production resolves this default
     # to the database-backed EMS adapter and never silently falls back.
-    mcp_gateway_mode: str = os.getenv("EMS_MCP_GATEWAY_MODE", "database" if os.getenv("DATABASE_URL") else "fixtures")
+    mcp_gateway_mode: str = os.getenv("EMS_MCP_GATEWAY_MODE", "database")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5-mini")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     database_url: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://ems:ems@127.0.0.1:5432/ems")
     db_pool_size: int = int(os.getenv("EMS_DB_POOL_SIZE", "5"))
     db_pool_mode: str = os.getenv("EMS_DB_POOL_MODE", "pool")
-    persistence_mode: str = os.getenv("EMS_PERSISTENCE_MODE", "postgres" if os.getenv("DATABASE_URL") else "memory")
+    persistence_mode: str = os.getenv("EMS_PERSISTENCE_MODE", "postgres")
 
 
 settings = Settings()

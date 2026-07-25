@@ -111,7 +111,12 @@ def error_response(exc: Exception) -> HTTPException:
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
-    return {"status": "ok", "service": "ems-api", "provider": settings.provider_mode}
+    return {
+        "status": "ok",
+        "service": "ems-api",
+        "provider": settings.provider_mode,
+        "model": settings.openai_model,
+    }
 
 
 @app.get("/readyz")

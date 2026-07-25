@@ -1,0 +1,65 @@
+name: ems-demo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ems
+      POSTGRES_USER: ems
+      POSTGRES_PASSWORD: ems
+    ports:
+      - "5432:5432"
+    volumes:
+      - ems_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ems -d ems"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./services/ems-api
+      dockerfile: Dockerfile
+    environment:
+      EMS_PERSISTENCE_MODE: postgres
+      EMS_PROVIDER_MODE: ${EMS_PROVIDER_MODE:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in the host environment or .env}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      DATABASE_URL: postgresql+asyncpg://ems:ems@postgres:5432/ems
+      EMS_ALLOWED_ORIGINS: http://localhost:5180,http://127.0.0.1:5180
+      EMS_SERVICE_TOKEN: local-ems-service-token
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  site-integration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_AGENTCREW_API_URL: http://localhost:8004/api/v1
+    ports:
+      - "5180:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  ems_postgres_data:
