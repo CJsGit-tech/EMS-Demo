@@ -174,6 +174,7 @@ def build_demo_fleet(at: datetime = DEMO_SEED_AT) -> DemoFleet:
             severity="high",
             assigned_team="維運一組",
             summary="EVSE 03 通訊異常待檢修",
+            source="simulated",
             created_at=at - timedelta(hours=3),
         ),
         WorkOrder(
@@ -185,6 +186,7 @@ def build_demo_fleet(at: datetime = DEMO_SEED_AT) -> DemoFleet:
             severity="medium",
             assigned_team="維運二組",
             summary="EVSE 02 輸出功率降載檢查中",
+            source="simulated",
             created_at=at - timedelta(hours=2),
         ),
         WorkOrder(
@@ -196,18 +198,11 @@ def build_demo_fleet(at: datetime = DEMO_SEED_AT) -> DemoFleet:
             severity="low",
             assigned_team="維運一組",
             summary="EVSE 05 充電中斷已完成現場排查",
+            source="simulated",
             created_at=at - timedelta(hours=1),
         ),
     )
-    work_order_events = tuple(
-        WorkOrderEvent(
-            work_order_id=order.work_order_id,
-            event_type=f"work_order.{order.state}",
-            payload={"source": "simulated", "state": order.state},
-            occurred_at=order.created_at,
-        )
-        for order in work_orders
-    )
+    work_order_events = tuple(_seed_work_order_event(order) for order in work_orders)
     return DemoFleet(
         evses,
         sessions,
@@ -316,4 +311,36 @@ def _string_readings(inverter: InverterReading) -> tuple[StringReading, ...]:
             occurred_at=inverter.occurred_at,
         )
         for number, deviation in enumerate(deviations_kw, start=1)
+    )
+
+
+def _seed_work_order_event(order: WorkOrder) -> WorkOrderEvent:
+    if order.state == "open":
+        event_type = "work_order.created"
+        previous_state = None
+        actor = "simulator-seed"
+        reason = "建立確定性模擬工單"
+    elif order.state == "in_progress":
+        event_type = "work_order.state_changed"
+        previous_state = "open"
+        actor = "simulator-maintenance-coordinator"
+        reason = "模擬現場確認後開始檢修"
+    else:
+        event_type = "work_order.state_changed"
+        previous_state = "in_progress"
+        actor = "simulator-maintenance-lead"
+        reason = "模擬現場排查完成並結案"
+    return WorkOrderEvent(
+        work_order_id=order.work_order_id,
+        event_type=event_type,
+        actor=actor,
+        reason=reason,
+        payload={
+            "source": "simulated",
+            "from_state": previous_state,
+            "to_state": order.state,
+            "actor": actor,
+            "reason": reason,
+        },
+        occurred_at=order.created_at,
     )

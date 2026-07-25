@@ -15,6 +15,8 @@ class V2GRepository:
     """The API's sole persistence writer for simulator data."""
 
     SQLITE_TEST_URL = "sqlite+aiosqlite:///:memory:"
+    WORK_ORDER_STATE_EVENT = "work_order.state_changed"
+    WORK_ORDER_TRANSITIONS = {"open": {"in_progress"}, "in_progress": {"completed"}}
 
     def __init__(self, engine: AsyncEngine):
         self._engine = engine
@@ -74,18 +76,93 @@ class V2GRepository:
             )
 
     async def append_work_order_event(
-        self, work_order_id: str, event_type: str, payload: dict[str, Any]
+        self,
+        work_order_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        actor: str | None = None,
+        reason: str | None = None,
     ) -> WorkOrderEvent:
         """Append a work-order history event without exposing mutation operations."""
+        actor = self._required_text(actor, "actor") if actor is not None else None
+        reason = self._required_text(reason, "reason") if reason is not None else None
+        if event_type == self.WORK_ORDER_STATE_EVENT and (actor is None or reason is None):
+            raise ValueError("work-order state events require actor and reason")
         async with self._sessions.begin() as session:
             event = WorkOrderEvent(
                 work_order_id=work_order_id,
                 event_type=event_type,
+                actor=actor,
+                reason=reason,
                 payload=payload,
             )
             session.add(event)
             await session.flush()
             return event
+
+    async def transition_work_order_state(
+        self,
+        work_order_id: str,
+        site_id: str,
+        state: str,
+        *,
+        actor: str,
+        reason: str,
+    ) -> WorkOrder:
+        """Atomically transition one site-scoped work order with an immutable event."""
+        actor = self._required_text(actor, "actor")
+        reason = self._required_text(reason, "reason")
+        if self._engine.dialect.name == "postgresql":
+            async with self._sessions.begin() as session:
+                await session.execute(
+                    text(
+                        "SELECT transition_work_order_state("
+                        ":work_order_id, :site_id, :state, :actor, :reason)"
+                    ),
+                    {
+                        "work_order_id": work_order_id,
+                        "site_id": site_id,
+                        "state": state,
+                        "actor": actor,
+                        "reason": reason,
+                    },
+                )
+                order = await session.get(WorkOrder, work_order_id)
+                if order is None:
+                    raise RuntimeError("work-order transition did not return a record")
+                return order
+
+        async with self._sessions.begin() as session:
+            order = await session.scalar(
+                select(WorkOrder)
+                .where(WorkOrder.work_order_id == work_order_id, WorkOrder.site_id == site_id)
+                .with_for_update()
+            )
+            if order is None:
+                raise ValueError("work order does not belong to the expected site")
+            await self._validate_work_order_asset_site(session, order)
+            if state not in self.WORK_ORDER_TRANSITIONS.get(order.state, set()):
+                raise ValueError(f"state transition from {order.state!r} to {state!r} is not permitted")
+
+            previous_state = order.state
+            order.state = state
+            event = WorkOrderEvent(
+                work_order_id=order.work_order_id,
+                event_type=self.WORK_ORDER_STATE_EVENT,
+                actor=actor,
+                reason=reason,
+                payload={
+                    "source": "runtime",
+                    "from_state": previous_state,
+                    "to_state": state,
+                    "actor": actor,
+                    "reason": reason,
+                },
+            )
+            session.add(event)
+            await session.flush()
+            return order
 
     async def append_audit(
         self, command_id: str, event_type: str, payload: dict[str, Any]
@@ -126,3 +203,19 @@ class V2GRepository:
                 text("SELECT pg_advisory_xact_lock(hashtext(:command_id))"),
                 {"command_id": command_id},
             )
+
+    @staticmethod
+    def _required_text(value: str | None, field: str) -> str:
+        if not isinstance(value, str) or not (normalized := value.strip()):
+            raise ValueError(f"{field} is required")
+        return normalized
+
+    @staticmethod
+    async def _validate_work_order_asset_site(session: AsyncSession, order: WorkOrder) -> None:
+        if order.asset_id is None:
+            return
+        asset_site_id = await session.scalar(
+            select(Evse.site_id).where(Evse.asset_id == order.asset_id)
+        )
+        if asset_site_id != order.site_id:
+            raise ValueError("work order asset does not belong to the expected site")

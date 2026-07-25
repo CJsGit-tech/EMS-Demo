@@ -1,9 +1,13 @@
-"""PostgreSQL-only proof for append-only command audit records.
+"""PostgreSQL-only proof for immutable event and runtime-role boundaries.
 
 This suite intentionally refuses every database except the local disposable
 ``v2g_test`` database named by ``V2G_TEST_DATABASE_URL``.  SQLite is covered by
 the portable repository tests and cannot prove PostgreSQL trigger behavior or
 advisory-lock concurrency.
+
+The runtime-role test additionally requires ``V2G_RUNTIME_TEST_DATABASE_URL``
+for the same local disposable database. Both URLs must be available from the
+local Docker stack; otherwise the relevant tests skip explicitly.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from v2g.repository import V2GRepository
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LOCAL_TEST_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOCAL_TEST_HOSTS = {"127.0.0.1", "localhost", "::1", "postgres"}
 
 
 @pytest.fixture(scope="module")
@@ -38,6 +42,26 @@ def postgres_test_url() -> str:
     url = make_url(database_url)
     if url.drivername != "postgresql+asyncpg":
         pytest.fail("V2G_TEST_DATABASE_URL must use the postgresql+asyncpg driver")
+    if url.host not in LOCAL_TEST_HOSTS or url.database != "v2g_test":
+        pytest.fail(
+            "refusing to run against a non-disposable database; "
+            "use local v2g_test only"
+        )
+    return database_url
+
+
+@pytest.fixture(scope="module")
+def postgres_runtime_test_url() -> str:
+    """Return the separately configured runtime URL for role-privilege proof."""
+    database_url = os.getenv("V2G_RUNTIME_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip(
+            "V2G_RUNTIME_TEST_DATABASE_URL is required for PostgreSQL runtime-role integration tests"
+        )
+
+    url = make_url(database_url)
+    if url.drivername != "postgresql+asyncpg":
+        pytest.fail("V2G_RUNTIME_TEST_DATABASE_URL must use the postgresql+asyncpg driver")
     if url.host not in LOCAL_TEST_HOSTS or url.database != "v2g_test":
         pytest.fail(
             "refusing to run against a non-disposable database; "
@@ -139,5 +163,82 @@ def test_concurrent_same_command_audit_appends_are_unique_and_ordered(
         sequences = [event.sequence for event in await repository.audit_events("cmd-concurrent")]
         assert sequences == list(range(1, append_count + 1))
         assert len(sequences) == len(set(sequences))
+
+    _in_disposable_postgres(postgres_test_url, assertion)
+
+
+def test_runtime_role_uses_only_controlled_work_order_transition_and_event_trigger(
+    postgres_test_url: str, postgres_runtime_test_url: str
+) -> None:
+    async def assertion(engine: AsyncEngine) -> None:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO evses (asset_id, site_id, display_name, state, created_at) "
+                    "VALUES ('evse-role-test', 'demo-v2g-site', 'Role test EVSE', 'available', NOW())"
+                )
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO work_orders ("
+                    "work_order_id, site_id, asset_id, state, severity, assigned_team, summary, source, created_at"
+                    ") VALUES ("
+                    "'wo-role-test', 'demo-v2g-site', 'evse-role-test', 'open', "
+                    "'low', 'test-team', 'Role-boundary test', 'simulated', NOW())"
+                )
+            )
+            privileges = (
+                await connection.execute(
+                    text(
+                        "SELECT "
+                        "has_table_privilege('v2g_runtime', 'work_orders', 'SELECT'), "
+                        "has_table_privilege('v2g_runtime', 'work_orders', 'UPDATE'), "
+                        "has_table_privilege('v2g_runtime', 'work_order_events', 'INSERT'), "
+                        "has_table_privilege('v2g_runtime', 'work_order_events', 'UPDATE'), "
+                        "has_function_privilege("
+                        "'v2g_runtime', "
+                        "'transition_work_order_state(character varying, character varying, character varying, character varying, text)', "
+                        "'EXECUTE')"
+                    )
+                )
+            ).one()
+            assert privileges == (True, False, True, False, True)
+
+        runtime_engine = create_async_engine(postgres_runtime_test_url)
+        try:
+            async with runtime_engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "SELECT transition_work_order_state("
+                        "'wo-role-test', 'demo-v2g-site', 'in_progress', 'runtime-test', 'controlled transition')"
+                    )
+                )
+
+            async with runtime_engine.connect() as connection:
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text("UPDATE work_orders SET state = 'completed' WHERE work_order_id = 'wo-role-test'")
+                    )
+                await connection.rollback()
+        finally:
+            await runtime_engine.dispose()
+
+        async with engine.begin() as connection:
+            event = (
+                await connection.execute(
+                    text(
+                        "SELECT event_type, actor, reason FROM work_order_events "
+                        "WHERE work_order_id = 'wo-role-test'"
+                    )
+                )
+            ).one()
+            assert event == ("work_order.state_changed", "runtime-test", "controlled transition")
+            with pytest.raises(DBAPIError, match="work_order_events are append-only"):
+                await connection.execute(
+                    text(
+                        "UPDATE work_order_events SET actor = 'tampered' "
+                        "WHERE work_order_id = 'wo-role-test'"
+                    )
+                )
 
     _in_disposable_postgres(postgres_test_url, assertion)

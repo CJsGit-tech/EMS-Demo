@@ -23,9 +23,11 @@ def test_runtime_grants_preserve_append_only_event_protection() -> None:
     bootstrap = (APP_ROOT / "services/v2g-api/src/v2g/bootstrap.py").read_text()
     roles = (APP_ROOT / "scripts/postgres-init/01-v2g-roles.sql").read_text()
 
-    assert "REVOKE ALL ON TABLE audit_records, work_order_events FROM v2g_runtime" in bootstrap
-    assert "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events FROM v2g_runtime" in bootstrap
+    assert "REVOKE ALL ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime" in bootstrap
+    assert "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime" in bootstrap
     assert "GRANT SELECT, INSERT ON TABLE audit_records, work_order_events TO v2g_runtime" in bootstrap
+    assert "GRANT SELECT ON TABLE work_orders TO v2g_runtime" in bootstrap
+    assert "GRANT EXECUTE ON FUNCTION transition_work_order_state" in bootstrap
     assert "GRANT USAGE, CREATE ON SCHEMA public TO v2g_owner WITH GRANT OPTION" in roles
 
 

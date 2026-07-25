@@ -178,3 +178,74 @@ Final repair verification:
 `git diff --check` passed for the repair scope. No unresolved Task 2 privilege
 boundary concern remains; live PostgreSQL trigger execution still requires a
 PostgreSQL integration environment.
+
+## Security-review repair (2026-07-25)
+
+### Controlled state-transition boundary
+
+- `V2GRepository.transition_work_order_state(work_order_id, site_id, state,
+  actor, reason)` is the only repository state-transition operation. It rejects
+  blank actor/reason, locks and verifies the expected site in the portable
+  implementation, accepts only `open → in_progress → completed`, and appends
+  the state event in the same transaction as the state update.
+- PostgreSQL enforces the same boundary with the owner-defined,
+  `SECURITY DEFINER` `transition_work_order_state(...)` function. The runtime
+  role has `SELECT` on `work_orders` and `EXECUTE` on this function, but no
+  direct `UPDATE`, `DELETE`, or `INSERT` rights on `work_orders`. This remains
+  usable by a future Task 3 service without granting it a repository-policy
+  bypass.
+- `WorkOrderEvent` now records `actor` and `reason`; a database check and
+  `append_work_order_event(...)` both reject a `work_order.state_changed` event
+  without non-empty attribution. The deterministic seeded non-open events now
+  include credible simulator actor/reason values and a `simulated` source
+  marker. Seeded work orders also have `source="simulated"`.
+
+### Site consistency and defaults
+
+- `StringReading` has a composite foreign key to `(inverter_id, site_id)` and
+  `WorkOrder` has a composite foreign key to `(asset_id, site_id)`. The parent
+  tables have matching unique constraints, preventing cross-site rows even if
+  a caller bypasses the repository.
+- Model server defaults now match the migration for operational source fields,
+  work-order state, and work-order event timestamps.
+
+### TDD and validation evidence
+
+Focused security tests were written before the implementation and initially
+failed as expected:
+
+```text
+.venv/bin/pytest tests/test_work_order_security.py -q
+FFF                                                                      [100%]
+AttributeError: 'V2GRepository' object has no attribute 'transition_work_order_state'
+Failed: DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>
+3 failed in 6.60s
+```
+
+After implementing the repository and composite constraints, the portable
+security/Task 2 suite passed:
+
+```text
+.venv/bin/pytest tests/test_migrations_env.py tests/test_workspace_seed.py tests/test_work_order_security.py tests/test_repository.py tests/test_task7_infrastructure_security.py -q
+............                                                             [100%]
+12 passed in 11.07s
+```
+
+The PostgreSQL integration suite documents explicit skip requirements for
+`V2G_TEST_DATABASE_URL` and `V2G_RUNTIME_TEST_DATABASE_URL`, both restricted
+to local `v2g_test`. With no URLs it skipped explicitly. The healthy local
+Docker stack was then used to create only the disposable `v2g_test` database
+and run the suite inside the Compose network:
+
+```text
+docker compose run ... api pytest tests/test_postgres_audit_integration.py -q
+....                                                                     [100%]
+4 passed in 2.51s
+```
+
+That live suite proves the audit and work-order event append-only triggers,
+the runtime role's lack of `UPDATE` on `work_orders` and `work_order_events`,
+its permitted `SELECT`/event `INSERT`/function `EXECUTE` rights, and a
+successful controlled runtime transition. An initial live failure exposed the
+missing migration `USAGE` grant on `public`; adding that grant made the
+security-definer function resolvable by `v2g_runtime`.

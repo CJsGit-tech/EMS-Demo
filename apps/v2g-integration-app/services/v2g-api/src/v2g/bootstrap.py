@@ -26,9 +26,10 @@ async def grant_runtime_access(database_url: str) -> None:
     """Grant the API role only the privileges needed by the simulator.
 
     This runs after every owner-led migration so grants remain correct for a
-    reused local volume as well as a new database.  Immutable event tables are
-    intentionally narrowed to append/read operations after the broad table
-    grant because the runtime role must never change or remove event history.
+    reused local volume as well as a new database. Immutable event tables stay
+    append/read-only, while work-order state changes are allowed only through
+    the owner-defined transition function so future services cannot bypass its
+    site, state, and attribution checks with direct ``UPDATE`` access.
     """
     engine = create_async_engine(database_url)
     try:
@@ -39,9 +40,12 @@ async def grant_runtime_access(database_url: str) -> None:
                 "GRANT CONNECT ON DATABASE v2g_simulator TO v2g_runtime",
                 "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO v2g_runtime",
                 "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime",
-                "REVOKE ALL ON TABLE audit_records, work_order_events FROM v2g_runtime",
-                "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events FROM v2g_runtime",
+                "REVOKE ALL ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime",
+                "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime",
                 "GRANT SELECT, INSERT ON TABLE audit_records, work_order_events TO v2g_runtime",
+                "GRANT SELECT ON TABLE work_orders TO v2g_runtime",
+                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime",
+                "GRANT EXECUTE ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) TO v2g_runtime",
                 "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO v2g_runtime",
                 "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO v2g_runtime",
             ):

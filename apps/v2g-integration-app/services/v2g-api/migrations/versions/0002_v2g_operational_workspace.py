@@ -20,6 +20,8 @@ json_document = sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), 
 
 
 def upgrade() -> None:
+    op.create_unique_constraint("uq_evses_asset_site", "evses", ["asset_id", "site_id"])
+
     op.create_table(
         "inverter_readings",
         sa.Column("inverter_id", sa.String(length=128), primary_key=True),
@@ -31,6 +33,7 @@ def upgrade() -> None:
         sa.Column("communication_state", sa.String(length=32), nullable=False),
         sa.Column("source", sa.String(length=32), nullable=False, server_default="simulated"),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("inverter_id", "site_id", name="uq_inverter_readings_inverter_site"),
     )
     op.create_index("ix_inverter_readings_site_id", "inverter_readings", ["site_id"])
     op.create_index("ix_inverter_readings_site_occurred_at", "inverter_readings", ["site_id", "occurred_at"])
@@ -38,17 +41,18 @@ def upgrade() -> None:
     op.create_table(
         "string_readings",
         sa.Column("string_reading_id", sa.Integer(), primary_key=True),
-        sa.Column(
-            "inverter_id",
-            sa.String(length=128),
-            sa.ForeignKey("inverter_readings.inverter_id", ondelete="RESTRICT"),
-            nullable=False,
-        ),
+        sa.Column("inverter_id", sa.String(length=128), nullable=False),
         sa.Column("site_id", sa.String(length=128), nullable=False),
         sa.Column("string_id", sa.String(length=128), nullable=False),
         sa.Column("dc_power_kw", sa.Numeric(18, 6), nullable=False),
         sa.Column("source", sa.String(length=32), nullable=False, server_default="simulated"),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["inverter_id", "site_id"],
+            ["inverter_readings.inverter_id", "inverter_readings.site_id"],
+            name="fk_string_readings_inverter_site",
+            ondelete="RESTRICT",
+        ),
     )
     op.create_index("ix_string_readings_inverter_occurred_at", "string_readings", ["inverter_id", "occurred_at"])
     op.create_index("ix_string_readings_site_occurred_at", "string_readings", ["site_id", "occurred_at"])
@@ -60,14 +64,23 @@ def upgrade() -> None:
         sa.Column(
             "asset_id",
             sa.String(length=128),
-            sa.ForeignKey("evses.asset_id", ondelete="RESTRICT"),
         ),
         sa.Column("source_alarm_code", sa.String(length=128)),
         sa.Column("state", sa.String(length=32), nullable=False, server_default="open"),
         sa.Column("severity", sa.String(length=32), nullable=False),
         sa.Column("assigned_team", sa.String(length=128), nullable=False),
         sa.Column("summary", sa.Text(), nullable=False),
+        sa.Column("source", sa.String(length=32), nullable=False, server_default="simulated"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["asset_id", "site_id"],
+            ["evses.asset_id", "evses.site_id"],
+            name="fk_work_orders_asset_site",
+            ondelete="RESTRICT",
+        ),
+        sa.CheckConstraint(
+            "state IN ('open', 'in_progress', 'completed')", name="ck_work_orders_permitted_state"
+        ),
     )
     op.create_index("ix_work_orders_site_id", "work_orders", ["site_id"])
     op.create_index("ix_work_orders_site_created_at", "work_orders", ["site_id", "created_at"])
@@ -83,8 +96,21 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("event_type", sa.String(length=128), nullable=False),
+        sa.Column("actor", sa.String(length=128)),
+        sa.Column("reason", sa.Text()),
         sa.Column("payload", json_document, nullable=False),
-        sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "occurred_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.CheckConstraint(
+            "event_type <> 'work_order.state_changed' OR "
+            "(actor IS NOT NULL AND length(trim(actor)) > 0 AND "
+            "reason IS NOT NULL AND length(trim(reason)) > 0)",
+            name="ck_work_order_events_state_transition_attribution",
+        ),
     )
     op.create_index(
         "ix_work_order_events_work_order_occurred_at",
@@ -116,16 +142,81 @@ def upgrade() -> None:
             FOR EACH STATEMENT EXECUTE FUNCTION prevent_work_order_event_mutation();
             """
         )
-        op.execute("REVOKE ALL ON TABLE audit_records, work_order_events FROM v2g_runtime")
         op.execute(
-            "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events FROM v2g_runtime"
+            """
+            CREATE FUNCTION transition_work_order_state(
+                p_work_order_id VARCHAR,
+                p_site_id VARCHAR,
+                p_state VARCHAR,
+                p_actor VARCHAR,
+                p_reason TEXT
+            ) RETURNS VOID
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = public, pg_temp
+            AS $$
+            DECLARE
+                v_previous_state VARCHAR;
+            BEGIN
+                IF btrim(COALESCE(p_actor, '')) = '' OR btrim(COALESCE(p_reason, '')) = '' THEN
+                    RAISE EXCEPTION 'work-order state transitions require actor and reason';
+                END IF;
+                IF p_state NOT IN ('in_progress', 'completed') THEN
+                    RAISE EXCEPTION 'work-order state % is not permitted', p_state;
+                END IF;
+
+                SELECT state INTO v_previous_state
+                FROM work_orders
+                WHERE work_order_id = p_work_order_id AND site_id = p_site_id
+                FOR UPDATE;
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'work order does not belong to the expected site';
+                END IF;
+                IF (v_previous_state = 'open' AND p_state <> 'in_progress')
+                    OR (v_previous_state = 'in_progress' AND p_state <> 'completed')
+                THEN
+                    RAISE EXCEPTION 'work-order state transition from % to % is not permitted',
+                        v_previous_state, p_state;
+                END IF;
+
+                UPDATE work_orders SET state = p_state
+                WHERE work_order_id = p_work_order_id AND site_id = p_site_id;
+                INSERT INTO work_order_events (
+                    work_order_id, event_type, actor, reason, payload
+                ) VALUES (
+                    p_work_order_id,
+                    'work_order.state_changed',
+                    btrim(p_actor),
+                    btrim(p_reason),
+                    jsonb_build_object(
+                        'source', 'runtime',
+                        'from_state', v_previous_state,
+                        'to_state', p_state,
+                        'actor', btrim(p_actor),
+                        'reason', btrim(p_reason)
+                    )
+                );
+            END;
+            $$;
+            """
         )
+        op.execute("REVOKE ALL ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) FROM PUBLIC")
+        op.execute("REVOKE ALL ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime")
+        op.execute(
+            "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime"
+        )
+        op.execute("GRANT USAGE ON SCHEMA public TO v2g_runtime")
         op.execute("GRANT SELECT, INSERT ON TABLE audit_records, work_order_events TO v2g_runtime")
+        op.execute("GRANT SELECT ON TABLE work_orders TO v2g_runtime")
+        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime")
+        op.execute("GRANT EXECUTE ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) TO v2g_runtime")
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute("REVOKE ALL ON TABLE work_order_events FROM v2g_runtime")
+        op.execute("REVOKE ALL ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) FROM v2g_runtime")
+        op.execute("DROP FUNCTION IF EXISTS transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT)")
         op.execute("DROP TRIGGER IF EXISTS work_order_events_prevent_truncate ON work_order_events")
         op.execute("DROP TRIGGER IF EXISTS work_order_events_append_only ON work_order_events")
         op.execute("DROP FUNCTION IF EXISTS prevent_work_order_event_mutation()")
@@ -142,3 +233,4 @@ def downgrade() -> None:
     op.drop_index("ix_inverter_readings_site_occurred_at", table_name="inverter_readings")
     op.drop_index("ix_inverter_readings_site_id", table_name="inverter_readings")
     op.drop_table("inverter_readings")
+    op.drop_constraint("uq_evses_asset_site", "evses", type_="unique")
