@@ -36,25 +36,30 @@ class AlarmService:
             if status in {"Available", "Charging", "Preparing"}:
                 return self._clear(event.asset_id, "evse.communication_lost", event.occurred_at)
 
-        if event.kind == "smart_charging_result" and event.payload.get("status") == "rejected":
-            return self._raise(
-                asset_id=None,
-                site_id=site_id,
-                code="site.smart_charging_rejected",
-                severity="warning",
-                message="The simulated site load limit rejected a smart-charging request.",
-                occurred_at=event.occurred_at,
-            )
+        if event.kind == "smart_charging_result":
+            if event.payload.get("status") == "rejected":
+                return self._raise(
+                    asset_id=None,
+                    site_id=site_id,
+                    code="site.smart_charging_rejected",
+                    severity="warning",
+                    message="The simulated site load limit rejected a smart-charging request.",
+                    occurred_at=event.occurred_at,
+                )
+            if event.payload.get("status") == "accepted":
+                return self._clear(None, "site.smart_charging_rejected", event.occurred_at)
 
-        if event.kind == "meter_values" and float(event.payload.get("temperature_c", 0)) >= 80:
-            return self._raise(
-                asset_id=event.asset_id,
-                site_id=site_id,
-                code="evse.overtemperature",
-                severity="critical",
-                message=f"EVSE {event.asset_id} reported an over-temperature condition.",
-                occurred_at=event.occurred_at,
-            )
+        if event.kind == "meter_values" and "temperature_c" in event.payload:
+            if float(event.payload["temperature_c"]) >= 80:
+                return self._raise(
+                    asset_id=event.asset_id,
+                    site_id=site_id,
+                    code="evse.overtemperature",
+                    severity="critical",
+                    message=f"EVSE {event.asset_id} reported an over-temperature condition.",
+                    occurred_at=event.occurred_at,
+                )
+            return self._clear(event.asset_id, "evse.overtemperature", event.occurred_at)
         return []
 
     def _raise(

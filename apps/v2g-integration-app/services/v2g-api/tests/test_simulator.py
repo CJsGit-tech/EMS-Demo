@@ -2,11 +2,10 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from v2g.models import Alarm, TelemetryPoint
-from v2g.repository import V2GRepository
+from v2g.models import Base, Evse, TelemetryPoint
 from v2g.seed import DEMO_SITE_ID, build_demo_fleet
-from v2g.seed import seed_demo_fleet
 from v2g.simulator import FleetSimulator
 
 
@@ -52,36 +51,52 @@ def test_demo_seed_has_five_evses_sessions_and_30_days_of_quarter_hour_telemetry
     assert len(fleet.alarms) >= 2
 
 
-def test_seed_commits_historian_state_before_publishing_events():
-    async def seed_and_observe() -> list[str]:
-        repository = V2GRepository.in_memory()
-        await repository.create_schema()
-        published_kinds: list[str] = []
-
-        async def publish(event) -> None:
-            async with repository._sessions() as reader:
-                assert await reader.scalar(select(func.count(TelemetryPoint.telemetry_id))) == 14403
-                assert await reader.scalar(select(func.count(Alarm.alarm_id))) == 2
-            published_kinds.append(event.kind)
-
+def test_file_backed_sqlite_hides_uncommitted_row_from_separate_publication_reader(tmp_path):
+    async def observe_transaction_isolation() -> tuple[int, int]:
+        database_path = tmp_path / "publication-isolation.sqlite"
+        engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}", pool_size=2)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
         try:
-            async with repository._sessions() as session:
-                await seed_demo_fleet(session, publish=publish)
-            return published_kinds
-        finally:
-            await repository.dispose()
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
 
-    assert asyncio.run(seed_and_observe()) == [
-        "status_notification",
-        "status_notification",
-        "status_notification",
-        "status_notification",
-        "status_notification",
-        "transaction_event",
-        "meter_values",
-        "transaction_event",
-        "meter_values",
-        "transaction_event",
-        "meter_values",
-        "smart_charging_result",
-    ]
+            async with sessions.begin() as session:
+                session.add(
+                    Evse(
+                        asset_id="evse-isolation",
+                        site_id=DEMO_SITE_ID,
+                        display_name="Isolation EVSE",
+                        state="available",
+                        created_at=datetime(2026, 7, 25, tzinfo=UTC),
+                    )
+                )
+
+            async with sessions() as writer:
+                async with writer.begin():
+                    writer.add(
+                        TelemetryPoint(
+                            asset_id="evse-isolation",
+                            site_id=DEMO_SITE_ID,
+                            metric="power_kw",
+                            value=7.2,
+                            unit="kW",
+                            quality="good",
+                            occurred_at=datetime(2026, 7, 25, tzinfo=UTC),
+                            received_at=datetime(2026, 7, 25, tzinfo=UTC),
+                        )
+                    )
+                    await writer.flush()
+                    async with sessions() as publication_reader:
+                        before_commit = await publication_reader.scalar(
+                            select(func.count(TelemetryPoint.telemetry_id))
+                        )
+
+            async with sessions() as publication_reader:
+                after_commit = await publication_reader.scalar(
+                    select(func.count(TelemetryPoint.telemetry_id))
+                )
+            return before_commit, after_commit
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(observe_transaction_isolation()) == (0, 1)

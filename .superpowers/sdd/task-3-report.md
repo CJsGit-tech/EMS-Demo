@@ -47,3 +47,23 @@ declared dependencies and was used for the persistence test.
   state is represented by `Evse` and `ChargingSession`; meter events are
   persisted as `TelemetryPoint`; alarms are persisted as `Alarm`. The optional
   publisher remains deliberately in-process and simulator-only.
+
+## Review follow-up
+
+- A successful simulated smart-charging result now clears the open
+  `site.smart_charging_rejected` alarm.
+- A meter event carrying a temperature below 80°C now clears the matching
+  EVSE's open `evse.overtemperature` alarm. Meter events without a temperature
+  field do not change this alarm state.
+- Replaced the shared-connection in-memory publication test with a file-backed
+  SQLite test that uses separate pooled writer and publication-reader sessions:
+  the reader sees zero flushed telemetry rows before commit and one afterward.
+
+Focused follow-up verification:
+
+```text
+cd apps/v2g-integration-app/services/v2g-api
+.venv/bin/pytest tests/test_alarms.py tests/test_simulator.py -q
+
+9 passed
+```

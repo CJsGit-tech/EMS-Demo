@@ -35,3 +35,57 @@ def test_repeated_fault_does_not_create_duplicate_open_alarm():
 
     assert len(first) == 1
     assert repeated == []
+
+
+def test_accepted_smart_charging_clears_its_rejection_alarm():
+    service = AlarmService()
+    rejected_at = datetime(2026, 7, 25, tzinfo=UTC)
+    service.raise_or_clear(
+        SimulatorEvent(
+            kind="smart_charging_result",
+            asset_id="demo-v2g-site",
+            occurred_at=rejected_at,
+            payload={"site_id": "demo-v2g-site", "status": "rejected"},
+        )
+    )
+
+    accepted_at = datetime(2026, 7, 25, 0, 15, tzinfo=UTC)
+    alarms = service.raise_or_clear(
+        SimulatorEvent(
+            kind="smart_charging_result",
+            asset_id="demo-v2g-site",
+            occurred_at=accepted_at,
+            payload={"site_id": "demo-v2g-site", "status": "accepted"},
+        )
+    )
+
+    assert [(alarm.code, alarm.state, alarm.cleared_at) for alarm in alarms] == [
+        ("site.smart_charging_rejected", "cleared", accepted_at)
+    ]
+
+
+def test_normal_temperature_clears_its_open_overtemperature_alarm():
+    service = AlarmService()
+    overtemperature_at = datetime(2026, 7, 25, tzinfo=UTC)
+    service.raise_or_clear(
+        SimulatorEvent(
+            kind="meter_values",
+            asset_id="evse-02",
+            occurred_at=overtemperature_at,
+            payload={"site_id": "demo-v2g-site", "temperature_c": 80},
+        )
+    )
+
+    normal_at = datetime(2026, 7, 25, 0, 15, tzinfo=UTC)
+    alarms = service.raise_or_clear(
+        SimulatorEvent(
+            kind="meter_values",
+            asset_id="evse-02",
+            occurred_at=normal_at,
+            payload={"site_id": "demo-v2g-site", "temperature_c": 79.9},
+        )
+    )
+
+    assert [(alarm.code, alarm.state, alarm.cleared_at) for alarm in alarms] == [
+        ("evse.overtemperature", "cleared", normal_at)
+    ]
