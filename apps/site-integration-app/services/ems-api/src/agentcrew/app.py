@@ -14,7 +14,7 @@ from .errors import AgentCrewError
 from .runtime import ToolRequest
 from .service import AgentCrewService
 from .supervisor import GPTSupervisor
-from ems.router import router as ems_router, ems_session_factory
+from ems.router import router as ems_router, ems_session_factory, ems_service
 from ems.mcp_adapter import EmsMcpAdapter, TOOL_KEYS
 from ems.capabilities import CapabilityIssuer, DurableReplayLedger, ReplayLedger
 
@@ -81,7 +81,7 @@ class ReportConfirmationRequest(SiteContextPayload):
 
 service = AgentCrewService()
 supervisor = GPTSupervisor(service.provider)
-ems_mcp_adapter = EmsMcpAdapter()
+ems_mcp_adapter = EmsMcpAdapter(ems_service)
 ems_capability_issuer = CapabilityIssuer()
 ems_replay_ledger = ReplayLedger()
 ems_durable_replay_ledger = DurableReplayLedger(ems_session_factory) if ems_session_factory is not None else None
@@ -164,8 +164,12 @@ def stream_run(payload: RunRequest) -> StreamingResponse:
             payload.session_id,
             recall=lambda: service.recall(payload.session_id, context, payload.message),
         )
+        def persisted_events():
+            for event in events:
+                service.record_stream_event(event, context, payload.session_id, payload.message)
+                yield event.as_sse()
         return StreamingResponse(
-            (event.as_sse() for event in events),
+            persisted_events(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -276,6 +280,8 @@ async def internal_tool(tool_key: str, payload: ToolRequestPayload) -> dict:
             else:
                 ems_replay_ledger.put(replay_key, result)
             return {"result": result}
+        if not service.gateway.is_fixture:
+            raise ValueError(f"Tool is not allowlisted: {tool_key}")
         result = service.gateway.call(ToolRequest(payload.run_id, payload.session_id, payload.to_domain(), tool_key, payload.arguments, attempt=payload.attempt))
         return {"result": {"run_id": result.run_id, "session_id": result.session_id, "site_id": result.site_id, "tool_key": result.tool_key, "outcome": result.outcome, "records": list(result.records), "sources": [asdict(source) for source in result.sources], "quality_notices": [asdict(notice) for notice in result.quality_notices], "discarded_record_count": result.discarded_record_count, "retry_count": result.retry_count, "error": result.error}}
     except Exception as exc:
