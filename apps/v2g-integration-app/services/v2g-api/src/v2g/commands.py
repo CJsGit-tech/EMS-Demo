@@ -157,18 +157,26 @@ class CommandService:
                 raise CommandPolicyError("unknown command")
             return command
 
-    async def approve(self, command_id: str, actor: str) -> SimulatedCommand:
-        """Record a named operator's approval for a non-expired command."""
+    async def approve(
+        self,
+        command_id: str,
+        actor: str,
+        reason: str | None = None,
+    ) -> SimulatedCommand:
+        """Record a named operator's approval and optional audit reason."""
         async with self._repository.lock:
             operation_at = self._timestamp()
             command = self._require_command(command_id)
             command = self._expire_if_needed(command, operation_at)
             self._require_non_empty(actor, "actor")
+            if reason is not None:
+                self._require_non_empty(reason, "reason")
             self._require_state(command, "awaiting_approval")
             approved = self._transition(
                 command,
                 "approved",
                 actor=actor.strip(),
+                reason=reason.strip() if reason is not None else None,
                 occurred_at=operation_at,
             )
             approved = replace(approved, approved_by=actor.strip())
