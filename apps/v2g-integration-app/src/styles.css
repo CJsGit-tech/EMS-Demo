@@ -773,3 +773,9 @@ td:last-child,
 .scada-string-card dd { margin: 0.2rem 0 0; color: #f0fbfd; font-family: "SFMono-Regular", Consolas, monospace; }
 .scada-outlier { color: #ff9b91; }
 .scada-analytics-list { margin: 0; padding: 0; list-style: none; color: #d7e6ec; }
+
+.scada-string-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { DispatchPage } from "../src/features/dispatch/DispatchPage.jsx";
+import { I18nProvider } from "../src/i18n/I18nProvider.jsx";
 
 const pendingRecommendation = {
   command_id: "cmd-014",
@@ -48,6 +49,16 @@ test("keeps advisory recommendations non-actionable", () => {
   expect(screen.getByRole("button", { name: "Approve simulated command" })).toBeDisabled();
 });
 
+test("localizes the dispatch eyebrow and backend state labels in the default Chinese UI", () => {
+  render(<I18nProvider><DispatchPage recommendations={[pendingRecommendation, { ...pendingRecommendation, command_id: "cmd-015", state: "proposed" }]} state="ready" /></I18nProvider>);
+
+  expect(screen.getByText("人工在迴路 · 僅限模擬器")).toBeVisible();
+  expect(screen.getByText("等待核准")).toBeVisible();
+  expect(screen.getByText("建議中")).toBeVisible();
+  expect(screen.queryByText("awaiting_approval")).not.toBeInTheDocument();
+  expect(screen.queryByText("proposed")).not.toBeInTheDocument();
+});
+
 test.each([
   ["a recommendation without a backend command ID", { command_id: "" }],
   ["an expired command", { expires_at: "2000-01-01T00:00:00.000Z" }],
@@ -80,7 +91,7 @@ test("updates a decided command so it cannot remain actionable", async () => {
   });
   fireEvent.click(within(screen.getByRole("dialog", { name: "Approve simulated command" })).getByRole("button", { name: "Approve simulated command" }));
 
-  await waitFor(() => expect(screen.getByText("approved")).toBeVisible());
+  await waitFor(() => expect(screen.getByText("Approved")).toBeVisible());
   expect(screen.getByRole("button", { name: "Approve simulated command" })).toBeDisabled();
   expect(screen.queryByRole("dialog", { name: "Approve simulated command" })).not.toBeInTheDocument();
 });
@@ -95,5 +106,5 @@ test("does not record a decision when the backend action is unavailable", async 
   fireEvent.click(within(screen.getByRole("dialog", { name: "Approve simulated command" })).getByRole("button", { name: "Approve simulated command" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent(/action is unavailable/i);
-  expect(screen.getByText("awaiting_approval")).toBeVisible();
+  expect(screen.getByText("Awaiting approval")).toBeVisible();
 });

@@ -49,3 +49,27 @@ vite build passed
   source, recurring-code, duration, and trend aggregates; String Health shows
   `—` for absent current/voltage values while still calculating power-based
   variance when enough string data is present.
+
+## Review repair follow-up
+
+- Replaced partial ARIA grid/row roles in String Health with a labelled native
+  list of semantic cards.
+- Made Event Analysis collection rendering safe for explicit `null` aggregate
+  fields and retained `—` as the unavailable value.
+- Added localized Dispatch eyebrow and command-state maps for every simulator
+  command lifecycle state. Default Chinese rendering no longer exposes raw
+  backend values such as `awaiting_approval` or `proposed`.
+
+Verification:
+
+```text
+cd apps/v2g-integration-app
+npm test -- --run tests/analytics.test.jsx tests/command-approval.test.jsx
+
+2 files passed, 13 tests passed
+
+npm test -- --run && npm run build
+
+9 files passed, 54 tests passed
+vite build passed
+```

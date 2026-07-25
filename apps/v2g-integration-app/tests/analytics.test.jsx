@@ -34,7 +34,8 @@ test("marks calculated efficiency as simulated and displays string outliers", ()
 
   expect(screen.getByText("模擬計算")).toBeVisible();
   expect(screen.getByText("偏差過高")).toBeVisible();
-  expect(screen.getByRole("grid", { name: "組串健康度" })).toBeVisible();
+  expect(screen.getByRole("list", { name: "組串健康度" })).toBeVisible();
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("renders efficiency KPIs, sorts inverters, and uses a dash for null calculations", () => {
@@ -54,4 +55,10 @@ test("renders event severity distributions and unavailable aggregate calculation
   expect(screen.getByText("critical · 1")).toBeVisible();
   expect(screen.getByText("dc_imbalance · 2")).toBeVisible();
   expect(screen.getByText("—")).toBeVisible();
+});
+
+test("renders unavailable event aggregate collections as dashes when the API explicitly returns null", () => {
+  render(<I18nProvider><EventAnalysisPage data={{ ...fixture, events: { by_severity: null, by_source: null, recurring_codes: null, average_duration_minutes: null, trend: null } }} state="ready" /></I18nProvider>);
+
+  expect(screen.getAllByText("—")).toHaveLength(4);
 });

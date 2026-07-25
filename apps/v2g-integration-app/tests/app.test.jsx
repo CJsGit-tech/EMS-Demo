@@ -79,9 +79,9 @@ test("opens the existing Operations workspace from the localized operations navi
 });
 
 test.each([
-  ["核准模擬指令", "approved", "/commands/cmd-014/approve"],
-  ["拒絕模擬指令", "rejected", "/commands/cmd-014/reject"],
-])("keeps the dispatch command callback wired for %s actions", async (action, state, endpoint) => {
+  ["核准模擬指令", "已核准", "/commands/cmd-014/approve"],
+  ["拒絕模擬指令", "已拒絕", "/commands/cmd-014/reject"],
+])("keeps the dispatch command callback wired for %s actions", async (action, displayState, endpoint) => {
   Object.defineProperties(HTMLDialogElement.prototype, {
     close: { configurable: true, value() { this.open = false; this.dispatchEvent(new Event("close")); } },
     showModal: { configurable: true, value() { this.open = true; } },
@@ -102,6 +102,6 @@ test.each([
   fireEvent.change(screen.getByLabelText("操作人原因"), { target: { value: "Record the simulator decision." } });
   fireEvent.click(within(screen.getByRole("dialog", { name: "核准模擬指令" })).getByRole("button", { name: action }));
 
-  expect(await screen.findByText(state)).toBeVisible();
+  expect(await screen.findByText(displayState)).toBeVisible();
   expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([expect.stringContaining(endpoint)]));
 });
