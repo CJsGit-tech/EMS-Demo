@@ -39,6 +39,33 @@ npm test -- --run && npm run build
 vite build passed
 ```
 
+## Re-review repair follow-up
+
+- String Health now calculates the DC-power average only from finite numeric
+  values. Rows with null or nonfinite power render `—` for the health variance
+  and cannot be classified as outliers, even if an upstream variance value is
+  present.
+- Replaced the remaining UI literals with dictionary keys in both locales:
+  Dispatch's unavailable expiry, the approval dialog's simulator-only eyebrow,
+  and the Inverter Efficiency table header.
+- Added focused regressions for finite-only String Health averaging, neutral
+  invalid rows, Chinese localization of the Dispatch/dialog fallbacks, and the
+  localized inverter column header.
+
+Verification:
+
+```text
+cd apps/v2g-integration-app
+npm test -- --run tests/analytics.test.jsx tests/command-approval.test.jsx
+
+2 files passed, 15 tests passed
+
+npm test -- --run && npm run build
+
+9 files passed, 56 tests passed
+vite build passed
+```
+
 ## Scope and concerns
 
 - Changes are limited to Task 5 frontend integration, localization, tests, and

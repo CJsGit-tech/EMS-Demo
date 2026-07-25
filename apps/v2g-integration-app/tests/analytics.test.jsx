@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { EventAnalysisPage } from "../src/features/analytics/EventAnalysisPage.jsx";
 import { InverterEfficiencyPage } from "../src/features/analytics/InverterEfficiencyPage.jsx";
@@ -45,8 +45,36 @@ test("renders efficiency KPIs, sorts inverters, and uses a dash for null calcula
   unmount();
 
   renderPage(InverterEfficiencyPage);
+  expect(screen.getByRole("columnheader", { name: "變流器" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "效率" }));
   expect(screen.getAllByRole("row")[1]).toHaveTextContent("inv-01");
+});
+
+test("calculates string power from finite numeric values and leaves invalid rows neutral", () => {
+  render(
+    <I18nProvider>
+      <StringHealthPage
+        data={{
+          ...fixture,
+          strings: [
+            { inverter_id: "inv-01", string_id: "string-01", dc_power_kw: 10, current_a: 5, voltage_v: 400, health_variance_percent: null },
+            { inverter_id: "inv-01", string_id: "string-02", dc_power_kw: 30, current_a: 5, voltage_v: 400, health_variance_percent: null },
+            { inverter_id: "inv-01", string_id: "string-03", dc_power_kw: null, current_a: 5, voltage_v: 400, health_variance_percent: 99 },
+            { inverter_id: "inv-01", string_id: "string-04", dc_power_kw: Number.POSITIVE_INFINITY, current_a: 5, voltage_v: 400, health_variance_percent: -99 },
+          ],
+        }}
+        state="ready"
+      />
+    </I18nProvider>,
+  );
+
+  const rows = screen.getAllByRole("listitem");
+  expect(within(rows[0]).getByText("-50%")).toBeVisible();
+  expect(within(rows[1]).getByText("50%")).toBeVisible();
+  for (const row of rows.slice(2)) {
+    expect(within(row).getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(within(row).queryByText("偏差過高")).not.toBeInTheDocument();
+  }
 });
 
 test("renders event severity distributions and unavailable aggregate calculations", () => {

@@ -27,9 +27,9 @@ function State({ state, error, t }) {
   return null;
 }
 
-function formatExpiry(value) {
+function formatExpiry(value, t) {
   const timestamp = new Date(value).valueOf();
-  return Number.isNaN(timestamp) ? "Unavailable" : new Date(timestamp).toLocaleString();
+  return Number.isNaN(timestamp) ? t("dispatch.unavailable") : new Date(timestamp).toLocaleString();
 }
 
 export function DispatchPage({ recommendations, state = "loading", error, onApprove, onReject, onCommandResolved }) {
@@ -76,7 +76,7 @@ export function DispatchPage({ recommendations, state = "loading", error, onAppr
         const pending = isApprovalEligible(item);
         return <article className="scada-panel scada-dispatch" key={item.commandId ?? `advisory-${index}`}>
           <div className="scada-dispatch__heading"><div><p className="scada-eyebrow">{pending ? t("dispatch.awaiting") : t("dispatch.advisory")}</p><h3>{item.reason ?? t("dispatch.advisory")}</h3></div><span className="scada-state-chip">{displayState(t, item.state)}</span></div>
-          <dl className="scada-key-values"><div><dt>{t("dispatch.expiry")}</dt><dd>{formatExpiry(item.expiresAt)}</dd></div><div><dt>{t("dispatch.projectedSoc")}</dt><dd>{Number.isFinite(item.projectedSoc) ? `${item.projectedSoc}%` : t("dispatch.notSupplied")}</dd></div><div><dt>{t("dispatch.expectedImpact")}</dt><dd>{Number.isFinite(item.impactKw) ? `${item.impactKw} kW` : t("dispatch.notSupplied")}</dd></div></dl>
+          <dl className="scada-key-values"><div><dt>{t("dispatch.expiry")}</dt><dd>{formatExpiry(item.expiresAt, t)}</dd></div><div><dt>{t("dispatch.projectedSoc")}</dt><dd>{Number.isFinite(item.projectedSoc) ? `${item.projectedSoc}%` : t("dispatch.notSupplied")}</dd></div><div><dt>{t("dispatch.expectedImpact")}</dt><dd>{Number.isFinite(item.impactKw) ? `${item.impactKw} kW` : t("dispatch.notSupplied")}</dd></div></dl>
           <div className="scada-constraint-list"><strong>{t("dispatch.constraints")}</strong><ul>{item.constraints.length ? item.constraints.map((constraint) => <li key={constraint}>{constraint}</li>) : <li>{t("dispatch.noConstraints")}</li>}</ul></div>
           {item.assumptions.length ? <p className="scada-data-note">{t("dispatch.assumptions")}: {item.assumptions.join(" · ")}</p> : null}
           {!pending ? <p className="scada-data-note">{t("dispatch.noAction")}</p> : null}

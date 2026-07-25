@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { DispatchPage } from "../src/features/dispatch/DispatchPage.jsx";
+import { CommandApprovalDialog } from "../src/components/CommandApprovalDialog.jsx";
 import { I18nProvider } from "../src/i18n/I18nProvider.jsx";
 
 const pendingRecommendation = {
@@ -57,6 +58,33 @@ test("localizes the dispatch eyebrow and backend state labels in the default Chi
   expect(screen.getByText("建議中")).toBeVisible();
   expect(screen.queryByText("awaiting_approval")).not.toBeInTheDocument();
   expect(screen.queryByText("proposed")).not.toBeInTheDocument();
+});
+
+test("localizes unavailable expiry and simulator-only approval copy", () => {
+  const invalidExpiry = { ...pendingRecommendation, expires_at: "not-a-date" };
+  const { unmount } = render(<I18nProvider><DispatchPage recommendations={[invalidExpiry]} state="ready" /></I18nProvider>);
+
+  expect(screen.getByText("無法取得")).toBeVisible();
+  unmount();
+
+  render(
+    <I18nProvider>
+      <CommandApprovalDialog
+        recommendation={{
+          commandId: "cmd-014",
+          expiresAt: "not-a-date",
+          projectedSoc: 74,
+          impactKw: -32,
+          constraints: ["Reserve SOC remains above 35%"],
+        }}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+
+  expect(screen.getByText("僅限模擬器建議")).toBeVisible();
+  expect(screen.getByText("無法取得")).toBeVisible();
 });
 
 test.each([

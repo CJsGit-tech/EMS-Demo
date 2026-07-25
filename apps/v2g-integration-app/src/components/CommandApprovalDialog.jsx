@@ -13,9 +13,9 @@ function getExpiryTimestamp(expiresAt) {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
-function formatExpiry(expiresAt) {
+function formatExpiry(expiresAt, t) {
   const timestamp = getExpiryTimestamp(expiresAt);
-  return timestamp === null ? "Unavailable" : new Date(timestamp).toLocaleString();
+  return timestamp === null ? t("dispatch.unavailable") : new Date(timestamp).toLocaleString();
 }
 
 export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
@@ -72,13 +72,13 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
   return (
     <dialog ref={dialogRef} className="scada-dialog" aria-labelledby={titleId} aria-describedby={descriptionId}>
       <form className="scada-dialog__form" aria-label={t("dispatch.dialogLabel")}>
-        <p className="scada-eyebrow">Simulator-only recommendation</p>
+        <p className="scada-eyebrow">{t("dispatch.simulatorOnlyRecommendation")}</p>
         <h2 id={titleId}>{t("dispatch.approve")}</h2>
         <p className="scada-dialog__intro" id={descriptionId}>{t("dispatch.dialogIntro")}</p>
         <dl className="scada-dialog__values">
           <div>
             <dt>{t("dispatch.expiry")}</dt>
-            <dd>{formatExpiry(recommendation.expiresAt)}</dd>
+            <dd>{formatExpiry(recommendation.expiresAt, t)}</dd>
           </div>
           <div>
             <dt>{t("dispatch.projectedSoc")}</dt>
