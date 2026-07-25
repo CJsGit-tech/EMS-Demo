@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import "../styles.css";
+import { hasFutureExpiry, isApprovalEligible } from "./commandEligibility.js";
 
 function getExpiryTimestamp(expiresAt) {
   if (typeof expiresAt !== "string" || expiresAt.trim().length === 0) {
@@ -56,14 +57,14 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
   const expiryTimestamp = getExpiryTimestamp(recommendation.expiresAt);
   const hasValidExpiry = expiryTimestamp !== null;
   const isExpired = hasValidExpiry && expiryTimestamp <= Date.now();
-  const canAct = reason.trim().length > 0 && hasValidExpiry && !isExpired;
+  const canAct = reason.trim().length > 0 && isApprovalEligible(recommendation);
 
   const approve = () => {
-    if (canAct) onApprove(recommendation.id, reason.trim());
+    if (canAct) onApprove(recommendation.commandId, reason.trim());
   };
 
   const reject = () => {
-    if (canAct) onReject(recommendation.id, reason.trim());
+    if (canAct) onReject(recommendation.commandId, reason.trim());
   };
 
   return (
@@ -89,7 +90,7 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
         <section aria-label="Simulated command constraints">
           <h3>Constraints</h3>
           <ul className="scada-constraints">
-            {(recommendation.constraints ?? []).map((constraint) => (
+            {recommendation.constraints.map((constraint) => (
               <li key={constraint}>{constraint}</li>
             ))}
           </ul>
@@ -104,7 +105,7 @@ export function CommandApprovalDialog({ recommendation, onApprove, onReject }) {
             required
           />
         </label>
-        {!hasValidExpiry || isExpired ? (
+        {!hasFutureExpiry(recommendation.expiresAt) ? (
           <p className="scada-expired" role="status">
             {isExpired
               ? "This simulated recommendation has expired and cannot be actioned."

@@ -11,7 +11,8 @@ const dialogMethodDescriptors = {
 };
 
 const recommendation = {
-  id: "rec-014",
+  commandId: "rec-014",
+  state: "awaiting_approval",
   expiresAt: "2030-01-15T10:30:00.000Z",
   projectedSoc: 74,
   impactKw: -32,
@@ -165,7 +166,7 @@ test("approves a non-expired simulated command with its operator reason", () => 
   fireEvent.click(screen.getByRole("button", { name: "Approve simulated command" }));
 
   expect(onApprove).toHaveBeenCalledWith(
-    recommendation.id,
+    recommendation.commandId,
     "Hold feeder draw below the simulated limit.",
   );
 });
@@ -187,7 +188,7 @@ test("rejects a non-expired simulated command with its operator reason", () => {
   fireEvent.click(screen.getByRole("button", { name: "Reject simulated command" }));
 
   expect(onReject).toHaveBeenCalledWith(
-    recommendation.id,
+    recommendation.commandId,
     "Keep the simulator in its current charging window.",
   );
 });

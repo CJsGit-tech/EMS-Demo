@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 
 import { OperationsPage } from "../src/features/operations/OperationsPage.jsx";
+import { HistorianPage } from "../src/features/historian/HistorianPage.jsx";
 
 test("shows simulator live metrics with adjacent freshness and quality", () => {
   render(
@@ -37,4 +38,22 @@ test("treats stale operations data as a visible operational state", () => {
 
   expect(screen.getByRole("status")).toHaveTextContent(/data may be stale/i);
   expect(screen.getAllByText("Data freshness: stale")).toHaveLength(2);
+});
+
+test("derives the historian warning from historian point quality", () => {
+  render(
+    <HistorianPage
+      historian={{
+        metric: "power_kw",
+        points: [{ occurred_at: "2030-01-15T10:30:00.000Z", value: 18.4, quality: "stale" }],
+        truncated: false,
+      }}
+      state="ready"
+      rangeHours={24}
+      onRangeChange={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByRole("status")).toHaveTextContent(/historian data may be stale/i);
+  expect(screen.getByText("Data quality: stale")).toBeVisible();
 });
