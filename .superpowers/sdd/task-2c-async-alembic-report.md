@@ -25,3 +25,13 @@
   were changed.
 - The local disposable PostgreSQL container is used solely for verification and
   should be removed after the task.
+
+## Review Finding Closure
+
+- Escaped percent signs when injecting `DATABASE_URL` into Alembic's
+  `ConfigParser`, preserving exact `%40` credentials for SQLAlchemy while
+  retaining the async PostgreSQL and SQLite migration paths.
+- Added `tests/test_migrations_env.py`, which runs the real Alembic environment
+  with a percent-encoded `postgresql+asyncpg` URL in offline mode.
+- Verification: targeted migration regression plus repository tests: `4 passed`;
+  SQLite online migration exited 0.

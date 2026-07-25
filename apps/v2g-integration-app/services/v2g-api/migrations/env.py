@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 config = context.config
 database_url = os.getenv("DATABASE_URL")
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    # Alembic stores options in ConfigParser, where a literal percent must be
+    # escaped even though SQLAlchemy needs the URL's percent-encoding intact.
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
