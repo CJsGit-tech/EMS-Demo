@@ -26,9 +26,9 @@ async def grant_runtime_access(database_url: str) -> None:
     """Grant the API role only the privileges needed by the simulator.
 
     This runs after every owner-led migration so grants remain correct for a
-    reused local volume as well as a new database.  ``audit_records`` is
+    reused local volume as well as a new database.  Immutable event tables are
     intentionally narrowed to append/read operations after the broad table
-    grant because the runtime role must never change or remove audit history.
+    grant because the runtime role must never change or remove event history.
     """
     engine = create_async_engine(database_url)
     try:
@@ -39,8 +39,9 @@ async def grant_runtime_access(database_url: str) -> None:
                 "GRANT CONNECT ON DATABASE v2g_simulator TO v2g_runtime",
                 "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO v2g_runtime",
                 "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime",
-                "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records FROM v2g_runtime",
-                "GRANT SELECT, INSERT ON TABLE audit_records TO v2g_runtime",
+                "REVOKE ALL ON TABLE audit_records, work_order_events FROM v2g_runtime",
+                "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events FROM v2g_runtime",
+                "GRANT SELECT, INSERT ON TABLE audit_records, work_order_events TO v2g_runtime",
                 "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO v2g_runtime",
                 "ALTER DEFAULT PRIVILEGES FOR ROLE v2g_owner IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO v2g_runtime",
             ):
