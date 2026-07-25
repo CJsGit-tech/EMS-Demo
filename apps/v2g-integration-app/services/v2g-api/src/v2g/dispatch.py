@@ -64,6 +64,11 @@ def _require_timezone_aware(value: datetime, field_name: str) -> None:
         raise ValueError(f"{field_name} requires a timezone-aware timestamp")
 
 
+def _require_finite_numeric(value: float, field_name: str) -> None:
+    if not isfinite(value):
+        raise CommandPolicyError(f"non-finite numeric value: {field_name}")
+
+
 def validate_request(request: CommandRequest, state: SiteState) -> None:
     """Validate a signed request against the supplied simulated site state."""
     _require_timezone_aware(request.expires_at, "request.expires_at")
@@ -71,7 +76,17 @@ def validate_request(request: CommandRequest, state: SiteState) -> None:
 
     if request.site_id != state.site_id:
         raise CommandPolicyError("site mismatch")
-    if not isfinite(request.power_kw) or abs(request.power_kw) > state.available_flexible_kw:
+
+    for value, field_name in (
+        (request.power_kw, "request.power_kw"),
+        (request.projected_soc_percent, "request.projected_soc_percent"),
+        (state.soc_percent, "state.soc_percent"),
+        (state.minimum_departure_soc_percent, "state.minimum_departure_soc_percent"),
+        (state.available_flexible_kw, "state.available_flexible_kw"),
+    ):
+        _require_finite_numeric(value, field_name)
+
+    if abs(request.power_kw) > state.available_flexible_kw:
         raise CommandPolicyError("insufficient flexible capacity")
     if request.power_kw < 0 and request.projected_soc_percent < state.minimum_departure_soc_percent:
         raise CommandPolicyError("departure SOC violation")
@@ -80,6 +95,13 @@ def validate_request(request: CommandRequest, state: SiteState) -> None:
 def build_recommendation(site_state: SiteState) -> DispatchRecommendation:
     """Build a short-lived, simulator-only recommendation from site state."""
     _require_timezone_aware(site_state.observed_at, "site_state.observed_at")
+    for value, field_name in (
+        (site_state.soc_percent, "site_state.soc_percent"),
+        (site_state.minimum_departure_soc_percent, "site_state.minimum_departure_soc_percent"),
+        (site_state.available_flexible_kw, "site_state.available_flexible_kw"),
+    ):
+        _require_finite_numeric(value, field_name)
+
     if site_state.available_flexible_kw < 0:
         raise ValueError("available_flexible_kw must not be negative")
 

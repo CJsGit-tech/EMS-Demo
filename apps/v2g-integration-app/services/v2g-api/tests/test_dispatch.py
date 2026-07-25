@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from math import nan
 
 import pytest
 
@@ -61,3 +62,28 @@ def test_validate_request_rejects_discharge_below_departure_soc():
             request(power_kw=-10.0, projected_soc_percent=29.9),
             site_state(),
         )
+
+
+@pytest.mark.parametrize(
+    ("request_overrides", "state_overrides", "field_name"),
+    [
+        ({"power_kw": nan}, {}, "request.power_kw"),
+        ({"projected_soc_percent": nan}, {}, "request.projected_soc_percent"),
+        ({}, {"soc_percent": nan}, "state.soc_percent"),
+        ({}, {"minimum_departure_soc_percent": nan}, "state.minimum_departure_soc_percent"),
+        ({}, {"available_flexible_kw": nan}, "state.available_flexible_kw"),
+    ],
+)
+def test_validate_request_rejects_non_finite_numeric_values(
+    request_overrides, state_overrides, field_name
+):
+    with pytest.raises(CommandPolicyError, match=f"non-finite numeric value: {field_name}"):
+        validate_request(request(**request_overrides), site_state(**state_overrides))
+
+
+def test_build_recommendation_rejects_non_finite_numeric_state():
+    with pytest.raises(
+        CommandPolicyError,
+        match="non-finite numeric value: site_state.available_flexible_kw",
+    ):
+        build_recommendation(site_state(available_flexible_kw=nan))
