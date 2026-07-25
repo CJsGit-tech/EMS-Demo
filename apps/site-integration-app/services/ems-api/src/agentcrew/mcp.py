@@ -177,9 +177,13 @@ class AuthoritativeMcpGateway(_GatewayPolicy):
                 principal = self.authorization.principal(current.active_site.user_id)
                 response = asyncio.run(self.adapter.call(current.tool_key, principal, current.active_site.site_id, current.arguments))
                 result = self._result_from_response(current, response, retry_count=attempt - 1)
-            except Exception:
+            except Exception as exc:
                 outcome = "missing_source" if attempt == 3 else "transient_failure"
-                error = {"code": "missing_source", "message": "Authoritative EMS data is unavailable after bounded retries."}
+                unavailable = str(exc) == "authoritative_repository_unavailable"
+                error = {
+                    "code": "authoritative_repository_unavailable" if unavailable else "missing_source",
+                    "message": "The authoritative PostgreSQL-backed EMS repository is unavailable." if unavailable else "Authoritative EMS data is unavailable after bounded retries.",
+                }
                 result = ToolResult(current.run_id, current.session_id, current.active_site.site_id, current.tool_key,
                                     outcome, retry_count=attempt - 1, error=error)
             self.persist_attempt(current, result)
@@ -214,6 +218,13 @@ class AuthoritativeMcpGateway(_GatewayPolicy):
                           error=response.get("error"))
 
 
+class _UnavailableAuthoritativeAdapter:
+    """Explicitly reject database mode when no PostgreSQL repository is configured."""
+
+    async def call(self, *_args, **_kwargs) -> dict[str, Any]:
+        raise RuntimeError("authoritative_repository_unavailable")
+
+
 def build_mcp_gateway(
     audit: Callable[[AuditEvent], None],
     approved: Callable[[str, str], bool],
@@ -228,6 +239,9 @@ def build_mcp_gateway(
     from ems.mcp_adapter import EmsMcpAdapter
     from ems.router import ems_service
 
+    if settings.persistence_mode.lower() != "postgres":
+        return AuthoritativeMcpGateway(audit, adapter=_UnavailableAuthoritativeAdapter(), authorization=ems_service.authorization,
+                                       approved=approved, persist_attempt=persist_attempt)
     adapter = EmsMcpAdapter(ems_service)
-    return AuthoritativeMcpGateway(audit, adapter=adapter, authorization=adapter.service.authorization,
+    return AuthoritativeMcpGateway(audit, adapter=adapter, authorization=ems_service.authorization,
                                    approved=approved, persist_attempt=persist_attempt)

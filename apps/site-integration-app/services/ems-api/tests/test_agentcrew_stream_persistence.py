@@ -20,7 +20,7 @@ def test_streamed_run_persists_all_typed_artifacts_under_the_supervisor_run_id(m
 
     with TestClient(app) as client:
         response = client.post("/api/v1/agentcrew/runs/stream", json={**CONTEXT, "message": "Analyze energy trend"})
-        streamed_run = client.get(f"/api/v1/agentcrew/runs/{next(iter(service.stream_artifacts))}")
+        streamed_run = client.get(f"/api/v1/agentcrew/runs/{next(iter(service.stream_artifacts))}", params=CONTEXT)
 
     assert response.status_code == 200
     artifact = service.stream_artifact(next(iter(service.stream_artifacts)))

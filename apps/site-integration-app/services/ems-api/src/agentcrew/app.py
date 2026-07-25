@@ -14,9 +14,7 @@ from .errors import AgentCrewError
 from .runtime import ToolRequest
 from .service import AgentCrewService
 from .supervisor import GPTSupervisor
-from ems.router import router as ems_router, ems_session_factory, ems_service
-from ems.mcp_adapter import EmsMcpAdapter, TOOL_KEYS
-from ems.capabilities import CapabilityIssuer, DurableReplayLedger, ReplayLedger
+from ems.router import router as ems_router
 
 
 class SiteContextPayload(BaseModel):
@@ -81,10 +79,6 @@ class ReportConfirmationRequest(SiteContextPayload):
 
 service = AgentCrewService()
 supervisor = GPTSupervisor(service.provider)
-ems_mcp_adapter = EmsMcpAdapter(ems_service)
-ems_capability_issuer = CapabilityIssuer()
-ems_replay_ledger = ReplayLedger()
-ems_durable_replay_ledger = DurableReplayLedger(ems_session_factory) if ems_session_factory is not None else None
 app = FastAPI(title="Verde EMS AgentCrew API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -108,7 +102,7 @@ def internal_service_auth(x_ems_service_token: str | None = Header(default=None)
 def error_response(exc: Exception) -> HTTPException:
     if isinstance(exc, AgentCrewError):
         code = exc.code.value
-        http_status = status.HTTP_503_SERVICE_UNAVAILABLE if code == "provider_unavailable" else (status.HTTP_409_CONFLICT if code in {"site_scope_violation", "run_interrupted"} else status.HTTP_400_BAD_REQUEST)
+        http_status = status.HTTP_503_SERVICE_UNAVAILABLE if code in {"provider_unavailable", "persistence_unavailable"} else (status.HTTP_409_CONFLICT if code in {"site_scope_violation", "run_interrupted"} else status.HTTP_400_BAD_REQUEST)
         return HTTPException(status_code=http_status, detail=exc.as_dict())
     if isinstance(exc, (KeyError, ValueError)):
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "validation_failed", "message": str(exc)})
@@ -178,9 +172,20 @@ def stream_run(payload: RunRequest) -> StreamingResponse:
 
 
 @app.get("/api/v1/agentcrew/runs/{run_id}")
-def get_run(run_id: str, x_correlation_id: str | None = Header(default=None)) -> dict:
+def get_run(
+    run_id: str,
+    site_id: str,
+    user_id: str,
+    session_id: str,
+    source_route: str,
+    site_name: str = "Verde North",
+    x_correlation_id: str | None = Header(default=None),
+) -> dict:
     try:
-        return {"requestId": request_id(x_correlation_id), "run": service.snapshot(run_id)}
+        context = ActiveSiteContext(site_id, site_name, user_id, source_route)
+        return {"requestId": request_id(x_correlation_id), "run": service.snapshot(run_id, context, session_id)}
+    except AgentCrewError as exc:
+        raise error_response(exc) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Run not found"}) from exc
 
@@ -253,36 +258,21 @@ def internal_start_run(payload: RunRequest) -> dict:
 
 
 @app.get("/internal/agentcrew/runs/{run_id}", dependencies=[Depends(internal_service_auth)])
-def internal_get_run(run_id: str) -> dict:
+def internal_get_run(run_id: str, site_id: str, user_id: str, session_id: str, source_route: str, site_name: str = "Verde North") -> dict:
     try:
-        return {"run": service.snapshot(run_id)}
+        return {"run": service.snapshot(run_id, ActiveSiteContext(site_id, site_name, user_id, source_route), session_id)}
+    except AgentCrewError as exc:
+        raise error_response(exc) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Run not found"}) from exc
 
 
 @app.post("/internal/agentcrew/tools/{tool_key}", dependencies=[Depends(internal_service_auth)])
-async def internal_tool(tool_key: str, payload: ToolRequestPayload) -> dict:
+def internal_tool(tool_key: str, payload: ToolRequestPayload) -> dict:
     if tool_key != payload.tool_key:
         raise HTTPException(status_code=400, detail={"code": "validation_failed", "message": "Tool path and payload do not match."})
     try:
-        if tool_key in TOOL_KEYS:
-            principal = ems_mcp_adapter.service.authorization.principal(payload.user_id)
-            capability = ems_capability_issuer.issue(payload.user_id, payload.site_id, payload.run_id, payload.session_id, {tool_key})
-            ems_capability_issuer.verify(capability, user_id=payload.user_id, site_code=payload.site_id, run_id=payload.run_id, session_id=payload.session_id, tool_key=tool_key)
-            nonce = str(payload.arguments.get("nonce", "mcp-direct"))
-            replay_key = ems_replay_ledger.key(payload.run_id, tool_key, payload.arguments, nonce)
-            prior = await ems_durable_replay_ledger.get(replay_key) if ems_durable_replay_ledger else ems_replay_ledger.get(replay_key)
-            if prior is not None:
-                return {"result": prior}
-            result = await ems_mcp_adapter.call(tool_key, principal, payload.site_id, payload.arguments)
-            if ems_durable_replay_ledger:
-                await ems_durable_replay_ledger.put(replay_key, session_id=payload.session_id, site_code=payload.site_id, result=result, expires_at=capability.expires_at)
-            else:
-                ems_replay_ledger.put(replay_key, result)
-            return {"result": result}
-        if not service.gateway.is_fixture:
-            raise ValueError(f"Tool is not allowlisted: {tool_key}")
-        result = service.gateway.call(ToolRequest(payload.run_id, payload.session_id, payload.to_domain(), tool_key, payload.arguments, attempt=payload.attempt))
+        result = service.call_tool(ToolRequest(payload.run_id, payload.session_id, payload.to_domain(), tool_key, payload.arguments, attempt=payload.attempt))
         return {"result": {"run_id": result.run_id, "session_id": result.session_id, "site_id": result.site_id, "tool_key": result.tool_key, "outcome": result.outcome, "records": list(result.records), "sources": [asdict(source) for source in result.sources], "quality_notices": [asdict(notice) for notice in result.quality_notices], "discarded_record_count": result.discarded_record_count, "retry_count": result.retry_count, "error": result.error}}
     except Exception as exc:
         raise error_response(exc) from exc

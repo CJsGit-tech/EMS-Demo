@@ -52,7 +52,8 @@ class AgentCrewService:
         run = AgentCrewRun(run_id, AgentRunStatus.QUEUED, context, hat, "Run accepted.")
         self.runs[run_id] = {"run": run, "message": message, "session_id": session_id, "handoffs": [hat], "result": None,
                              "approval_needed": False, "repair_count": 0,
-                             "memory": self.recall(session_id, context, message), "assistant_message_saved": False}
+                             "memory": self.recall(session_id, context, message), "assistant_message_saved": False,
+                             "report_first": None, "pending_tool": None}
         if idempotency_key:
             self.idempotency[idempotency_key] = run_id
         self.audit_events.append(AuditEvent("run.created", run_id, context.site_id, context.user_id, session_id,
@@ -91,18 +92,28 @@ class AgentCrewService:
         state = self.runs[run_id]; run: AgentCrewRun = state["run"]
         report_tool = self.gateway.workflow_tools[AgentHat.REPORT_GENERATION_SPECIALIST.value]["report"]
         analysis_tool = self.gateway.workflow_tools[AgentHat.REPORT_GENERATION_SPECIALIST.value]["analysis"]
-        first = self.gateway.call(ToolRequest(run_id, state["session_id"], run.site_context, report_tool, {"site_id": run.site_context.site_id}))
-        if first.outcome == "approval_required":
-            state["approval_needed"] = True
-            state["run"] = AgentCrewRun(run.run_id, AgentRunStatus.WAITING_FOR_TOOL_APPROVAL, run.site_context, run.active_hat, "A report input read needs approval.")
-            return
-        if first.outcome == "missing_source":
-            self._complete_insufficient(run_id, first)
-            return
+        first = state.get("report_first")
+        if first is None:
+            first = self.gateway.call(ToolRequest(run_id, state["session_id"], run.site_context, report_tool, {"site_id": run.site_context.site_id}))
+            if first.outcome == "approval_required":
+                state["approval_needed"] = True
+                state["pending_tool"] = report_tool
+                state["run"] = AgentCrewRun(run.run_id, AgentRunStatus.WAITING_FOR_TOOL_APPROVAL, run.site_context, run.active_hat, "A report input read needs approval.")
+                return
+            if first.outcome == "missing_source":
+                self._complete_insufficient(run_id, first)
+                return
+            state["report_first"] = first
         analysis = self.gateway.call(ToolRequest(run_id, state["session_id"], run.site_context, analysis_tool, {"site_id": run.site_context.site_id}))
+        if analysis.outcome == "approval_required":
+            state["approval_needed"] = True
+            state["pending_tool"] = analysis_tool
+            state["run"] = AgentCrewRun(run.run_id, AgentRunStatus.WAITING_FOR_TOOL_APPROVAL, run.site_context, run.active_hat, "An energy analysis read needs approval.")
+            return
         if analysis.outcome == "missing_source":
             self._complete_insufficient(run_id, analysis)
             return
+        state["pending_tool"] = None
         assert_handoff(AgentHat.REPORT_GENERATION_SPECIALIST, AgentHat.DATA_ANALYSIS_SPECIALIST, state["handoffs"])
         state["handoffs"].append(AgentHat.DATA_ANALYSIS_SPECIALIST)
         state["run"] = AgentCrewRun(run.run_id, AgentRunStatus.RUNNING, run.site_context, AgentHat.REPORT_GENERATION_SPECIALIST, "Report inputs analyzed.")
@@ -255,7 +266,7 @@ class AgentCrewService:
         if run.status != AgentRunStatus.WAITING_FOR_TOOL_APPROVAL:
             return self.snapshot(run_id)
         if run.active_hat == AgentHat.REPORT_GENERATION_SPECIALIST:
-            tool = self.gateway.workflow_tools[AgentHat.REPORT_GENERATION_SPECIALIST.value]["report"]
+            tool = state.get("pending_tool") or self.gateway.workflow_tools[AgentHat.REPORT_GENERATION_SPECIALIST.value]["report"]
         else:
             tool = self.gateway.workflow_tools[run.active_hat.value]["read"]
         if mode == ApprovalMode.APPROVE_ALL_SESSION:
@@ -312,9 +323,10 @@ class AgentCrewService:
             raise AgentCrewError(AgentCrewErrorCode.RUN_INTERRUPTED, "Only interrupted runs can be recovered.")
         self._execute(run_id); self._persist_state(run_id); self._append_completion_message(run_id); return self.snapshot(run_id)
 
-    def snapshot(self, run_id: str) -> dict[str, Any]:
+    def snapshot(self, run_id: str, context: ActiveSiteContext | None = None, session_id: str | None = None) -> dict[str, Any]:
         if run_id in self.stream_artifacts:
             artifact = self.stream_artifact(run_id)
+            self._require_snapshot_owner(artifact["siteId"], artifact["userId"], artifact["sessionId"], context, session_id)
             return {
                 "runId": artifact["runId"],
                 "status": artifact["status"],
@@ -327,9 +339,38 @@ class AgentCrewService:
                 "message": "Streamed supervisor run.",
                 "result": {"streamEvents": artifact["events"]},
             }
+        if run_id not in self.runs:
+            durable = self.persistence.load_run(run_id)
+            if durable is None:
+                raise KeyError(run_id)
+            self._require_snapshot_owner(durable["siteId"], durable["userId"], durable["sessionId"], context, session_id)
+            return {
+                "runId": durable["runId"],
+                "status": durable["status"],
+                "siteContext": {
+                    "siteId": durable["siteId"],
+                    "siteName": context.site_name if context else None,
+                    "userId": durable["userId"],
+                    "sourceRoute": context.source_route if context else None,
+                },
+                "activeHat": durable["activeHat"],
+                "message": "Recovered persisted AgentCrew run.",
+                "result": durable["result"],
+            }
         state = self.runs[run_id]; run: AgentCrewRun = state["run"]
+        self._require_snapshot_owner(run.site_context.site_id, run.site_context.user_id, state["session_id"], context, session_id)
         routing = {"selectedHat": run.active_hat.value if run.active_hat else None, "handoffSequence": [hat.value for hat in state["handoffs"]], "rationale": "Matched the request to a bounded specialist."}
         return public_run(run, routing=routing, result=state["result"])
+
+    @staticmethod
+    def _require_snapshot_owner(site_id: str, user_id: str, owner_session_id: str, context: ActiveSiteContext | None, session_id: str | None) -> None:
+        if context is None and session_id is None:
+            return
+        if context is None or session_id is None:
+            raise AgentCrewError(AgentCrewErrorCode.SITE_SCOPE_VIOLATION, "A site context and session are required to read this run.")
+        require_site_context(context)
+        if context.site_id != site_id or context.user_id != user_id or session_id != owner_session_id:
+            raise AgentCrewError(AgentCrewErrorCode.SITE_SCOPE_VIOLATION, "Run does not belong to this active site, user, and session.")
 
     def audit(self, site_id: str, user_id: str) -> list[dict[str, Any]]:
         durable = self.persistence.list_audit(site_id, user_id)
@@ -404,20 +445,41 @@ class AgentCrewService:
         state = self.runs.get(run_id)
         if not state:
             return
-        snapshot = self.snapshot(run_id)
-        snapshot["sessionId"] = state["session_id"]
-        self.persistence.save_run(snapshot, state["run"].site_context, state["message"])
-        result = state.get("result") or {}
-        if result.get("draft"):
-            self.persistence.save_report(result["draft"], state["run"].site_context.user_id)
-        self.persistence.save_handoffs(run_id, state["run"].site_context.site_id, state["run"].site_context.user_id, [hat.value for hat in state["handoffs"]])
+        try:
+            snapshot = self.snapshot(run_id)
+            snapshot["sessionId"] = state["session_id"]
+            self.persistence.save_run(snapshot, state["run"].site_context, state["message"])
+            result = state.get("result") or {}
+            if result.get("draft"):
+                self.persistence.save_report(result["draft"], state["run"].site_context.user_id)
+            self.persistence.save_handoffs(run_id, state["run"].site_context.site_id, state["run"].site_context.user_id, [hat.value for hat in state["handoffs"]])
+            self._persist_pending_audits()
+        except Exception:
+            run: AgentCrewRun = state["run"]
+            state["result"] = {
+                "code": "persistence_unavailable",
+                "message": "The run could not be durably saved; no durable success was reported.",
+            }
+            state["run"] = AgentCrewRun(run.run_id, AgentRunStatus.FAILED, run.site_context, run.active_hat, "Durable persistence failed.")
+            self.audit_events.append(AuditEvent(
+                "run.persistence_failed", run_id, run.site_context.site_id, run.site_context.user_id, state["session_id"],
+                {"code": "persistence_unavailable"},
+            ))
+
+    def _persist_mcp_attempt(self, request: ToolRequest, result: ToolResult) -> None:
+        self.persistence.save_mcp_attempt(request, result)
+
+    def call_tool(self, request: ToolRequest) -> ToolResult:
+        """Route every public MCP read through the selected policy gateway."""
+        result = self.gateway.call(request)
+        self._persist_pending_audits()
+        return result
+
+    def _persist_pending_audits(self) -> None:
         for event in self.audit_events:
             if event.event_id not in self._persisted_audit_ids:
                 self.persistence.save_audit(event)
                 self._persisted_audit_ids.add(event.event_id)
-
-    def _persist_mcp_attempt(self, request: ToolRequest, result: ToolResult) -> None:
-        self.persistence.save_mcp_attempt(request, result)
 
     @staticmethod
     def _citation_provenance(*results: ToolResult) -> list[dict[str, str]]:

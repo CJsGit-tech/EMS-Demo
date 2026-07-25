@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import agentcrew.app as app_module
 from agentcrew.app import app, service
+from agentcrew.mcp import AuthoritativeMcpGateway
 from agentcrew.supervisor import GPTSupervisor
 
 
@@ -44,6 +45,8 @@ def test_report_revision_confirmation_is_idempotent_and_site_scoped():
     with TestClient(app) as client:
         started = client.post("/api/v1/agentcrew/runs", json={**CONTEXT, "message": "Create a site operations report draft"})
         run_id = started.json()["run"]["runId"]
+        first_approval = client.post(f"/api/v1/agentcrew/runs/{run_id}/approvals", json={"session_id": CONTEXT["session_id"], "mode": "approve_step"})
+        assert first_approval.json()["run"]["status"] == "waiting_for_tool_approval"
         approved = client.post(f"/api/v1/agentcrew/runs/{run_id}/approvals", json={"session_id": CONTEXT["session_id"], "mode": "approve_step"})
         draft_id = approved.json()["run"]["result"]["draft"]["draft_id"]
 
@@ -88,13 +91,32 @@ def test_fastapi_preserves_idempotency_and_rejects_invalid_site_route():
 
 
 def test_internal_tool_delegates_to_authoritative_service_and_enforces_token():
-    payload = {**CONTEXT, "run_id": "run-mcp", "tool_key": "energy_timeseries", "arguments": {"site_id": "site-001"}}
+    payload = {**CONTEXT, "run_id": "run-mcp", "tool_key": "query_energy_timeseries", "arguments": {"site_id": "site-001"}}
+
+    class Adapter:
+        async def call(self, tool_key, principal, site_code, arguments):
+            return {"site_id": site_code, "tool_key": tool_key, "outcome": "ok", "records": [{"site_id": site_code}], "sources": []}
+
+    class Authorization:
+        def principal(self, user_id):
+            return type("Principal", (), {"user_id": user_id})()
+
+    original_gateway = service.gateway
+    service.gateway = AuthoritativeMcpGateway(
+        service.audit_events.append,
+        adapter=Adapter(),
+        authorization=Authorization(),
+        approved=lambda _session, _tool: True,
+        persist_attempt=service._persist_mcp_attempt,
+    )
     with TestClient(app) as client:
-        unauthorized = client.post("/internal/agentcrew/tools/energy_timeseries", json=payload)
+        unauthorized = client.post("/internal/agentcrew/tools/query_energy_timeseries", json=payload)
         assert unauthorized.status_code == 401
-        response = client.post("/internal/agentcrew/tools/energy_timeseries", headers={"X-EMS-Service-Token": "local-ems-service-token"}, json=payload)
+        response = client.post("/internal/agentcrew/tools/query_energy_timeseries", headers={"X-EMS-Service-Token": "local-ems-service-token"}, json=payload)
         assert response.status_code == 200
         assert response.json()["result"]["site_id"] == "site-001"
+        assert {event.event_type for event in service.audit_events} >= {"mcp_tool_requested", "mcp_tool_attempted", "mcp_tool_responded"}
+    service.gateway = original_gateway
 
 
 def test_memory_and_preferences_are_site_scoped():
@@ -124,3 +146,30 @@ def test_stream_endpoint_exposes_typed_sse_events_and_provider_status(monkeypatc
     assert "event: run.started" in stream_response.text
     assert "event: specialist.delegated" in stream_response.text
     assert '"type":"run.completed"' in stream_response.text
+
+
+def test_get_run_recovers_a_persisted_artifact_with_matching_site_and_session(monkeypatch):
+    persisted = {
+        "runId": "run-after-restart",
+        "status": "completed",
+        "activeHat": "data_analysis_specialist",
+        "siteId": CONTEXT["site_id"],
+        "userId": CONTEXT["user_id"],
+        "sessionId": CONTEXT["session_id"],
+        "result": {"streamEvents": [{"type": "run.completed"}]},
+    }
+    monkeypatch.setattr(service.persistence, "load_run", lambda run_id: persisted if run_id == persisted["runId"] else None)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/agentcrew/runs/run-after-restart",
+            params={"site_id": CONTEXT["site_id"], "user_id": CONTEXT["user_id"], "session_id": CONTEXT["session_id"], "source_route": CONTEXT["source_route"]},
+        )
+        crossed = client.get(
+            "/api/v1/agentcrew/runs/run-after-restart",
+            params={"site_id": "site-002", "user_id": CONTEXT["user_id"], "session_id": CONTEXT["session_id"], "source_route": "site/site-002/overview"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["run"]["result"] == persisted["result"]
+    assert crossed.status_code == 409

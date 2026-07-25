@@ -20,6 +20,7 @@ from sqlalchemy import delete, select
 
 from .config import settings
 from .db import async_session_factory
+from .errors import AgentCrewError, AgentCrewErrorCode
 from .db.models import (
     AgentRunRecord,
     ApprovalRecord,
@@ -53,14 +54,21 @@ class DurableRepository:
         self.last_error: str | None = None
 
     def _execute(self, operation):
-        if not self.available:
+        # Explicit fixture/offline modes intentionally have no database owner.
+        # Every configured production persistence operation must either commit
+        # or surface a safe failure; it must never become a silent no-op.
+        if not self.enabled:
             return None
+        if not self.available:
+            raise AgentCrewError(AgentCrewErrorCode.PERSISTENCE_UNAVAILABLE, "Durable AgentCrew persistence is unavailable.")
         try:
             return asyncio.run(operation())
-        except Exception as exc:  # database outage must not break fixture mode
+        except AgentCrewError:
+            raise
+        except Exception as exc:
             self.available = False
             self.last_error = type(exc).__name__
-            return None
+            raise AgentCrewError(AgentCrewErrorCode.PERSISTENCE_UNAVAILABLE, "Durable AgentCrew persistence is unavailable.") from exc
 
     def save_session(self, session_id: str, site_id: str, user_id: str, title: str = "Site operations chat") -> None:
         async def operation():

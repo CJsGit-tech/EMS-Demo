@@ -29,6 +29,21 @@ def test_report_run_uses_bounded_allowlisted_handoffs_and_persists_draft():
     assert done["result"]["handoffSequence"] == ["report_generation_specialist", "data_analysis_specialist", "report_generation_specialist"]
 
 
+def test_report_chain_requires_a_second_step_approval_before_the_analysis_read():
+    service = AgentCrewService()
+
+    waiting_for_report = service.start(CONTEXT, "Prepare an energy report", "session-1")
+    waiting_for_analysis = service.approve(waiting_for_report["runId"], "session-1", ApprovalMode.APPROVE_STEP)
+
+    assert waiting_for_analysis["status"] == AgentRunStatus.WAITING_FOR_TOOL_APPROVAL.value
+    assert waiting_for_analysis["message"] == "An energy analysis read needs approval."
+    attempted_tools = [event.payload["tool_key"] for event in service.audit_events if event.event_type == "mcp_tool_attempted"]
+    assert attempted_tools == ["report_inputs"]
+
+    completed = service.approve(waiting_for_report["runId"], "session-1", ApprovalMode.APPROVE_STEP)
+    assert completed["status"] == AgentRunStatus.COMPLETED.value
+
+
 class SequencedResponses:
     def __init__(self, payloads):
         self.payloads = list(payloads)
@@ -131,3 +146,21 @@ def test_only_the_draft_owner_can_confirm_a_report_for_the_same_site():
         service.confirm_report(draft_id, another_user)
 
     assert error.value.code == AgentCrewErrorCode.SITE_SCOPE_VIOLATION
+
+
+def test_persistence_failure_marks_the_run_failed_and_emits_a_terminal_event():
+    class FailingPersistence:
+        def __getattr__(self, _name):
+            return lambda *_args, **_kwargs: None
+
+        def save_run(self, *_args, **_kwargs):
+            raise RuntimeError("database unavailable")
+
+    service = AgentCrewService()
+    service.persistence = FailingPersistence()
+
+    run = service.start(CONTEXT, "Show device health", "session-1")
+
+    assert run["status"] == AgentRunStatus.FAILED.value
+    assert run["result"]["code"] == "persistence_unavailable"
+    assert any(event.event_type == "run.persistence_failed" for event in service.audit_events)
