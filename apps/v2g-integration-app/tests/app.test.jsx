@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import App from "../src/App.jsx";
 
 test("renders the V2G SCADA shell", () => {
@@ -8,7 +9,7 @@ test("renders the V2G SCADA shell", () => {
   expect(screen.getByRole("main", { name: "V2G SCADA" })).toBeInTheDocument();
 });
 
-test("navigates the grouped SCADA sidebar using allowlisted supervisor endpoints", async () => {
+test("navigates the grouped SCADA sidebar from a keyboard-focused native button using allowlisted supervisor endpoints", async () => {
   const responses = {
     overview: { site_id: "demo-v2g-site", site_power_kw: 18.4, available_flexible_kw: 25, data_freshness: { observed_at: "2030-01-15T10:30:00Z", quality: "good" } },
     fleet: { site_id: "demo-v2g-site", evses: [{ asset_id: "evse-01", display_name: "Demo EVSE", state: "Charging" }], sessions: [] },
@@ -30,7 +31,14 @@ test("navigates the grouped SCADA sidebar using allowlisted supervisor endpoints
 
   expect(await screen.findByText("18.4 kW")).toBeVisible();
   expect(screen.getByRole("navigation", { name: "SCADA 區域" })).toBeVisible();
-  for (const item of [["EVSE 車隊", "Fleet"], ["調度監督", "Dispatch"], ["目前告警", "Alarms"], ["電力歷史資料", "Historian"]]) {
+  const user = userEvent.setup();
+  const fleetButton = screen.getByRole("button", { name: "EVSE 車隊" });
+  fleetButton.focus();
+  expect(fleetButton).toHaveFocus();
+  await user.keyboard("{Enter}");
+  expect(await screen.findByRole("heading", { name: "Fleet" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "EVSE 車隊" })).toHaveAttribute("aria-current", "page");
+  for (const item of [["調度監督", "Dispatch"], ["目前告警", "Alarms"], ["電力歷史資料", "Historian"]]) {
     fireEvent.click(screen.getByRole("button", { name: item[0] }));
     expect(await screen.findByRole("heading", { name: item[1] })).toBeVisible();
   }
