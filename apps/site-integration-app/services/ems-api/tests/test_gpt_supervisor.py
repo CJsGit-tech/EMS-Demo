@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,6 +32,48 @@ class FailingProvider:
         yield  # pragma: no cover
 
 
+class ResponsesApiLifecycleProvider:
+    """Representative Responses SDK events, including its object form."""
+
+    model = "gpt-5-mini"
+
+    def stream(self, *args, **kwargs):
+        yield SimpleNamespace(type="response.web_search_call.in_progress", item_id="ws-1")
+        yield SimpleNamespace(type="response.web_search_call.searching", item_id="ws-1")
+        yield SimpleNamespace(
+            type="response.web_search_call.completed",
+            item_id="ws-1",
+            queries=["grid forecast", "Taipei weather"],
+            sources=[SimpleNamespace(url="https://example.test/forecast", title="Forecast")],
+        )
+        yield {
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc-1",
+            "name": "query_energy_timeseries",
+            "arguments": '{"site_id":"site-001"}',
+        }
+        yield {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "function_call",
+                "id": "fc-1",
+                "name": "query_energy_timeseries",
+                "arguments": '{"site_id":"site-001"}',
+            },
+        }
+        yield {"type": "response.completed"}
+
+
+class NestedFailureProvider:
+    model = "gpt-5-mini"
+
+    def stream(self, *args, **kwargs):
+        yield SimpleNamespace(
+            type="response.failed",
+            response=SimpleNamespace(error=SimpleNamespace(message="upstream unavailable")),
+        )
+
+
 def test_supervisor_orders_delegation_deltas_tools_web_search_and_terminal_event():
     supervisor = GPTSupervisor(
         provider=FakeProvider(),
@@ -60,6 +103,60 @@ def test_supervisor_emits_a_terminal_safe_provider_error():
 
     assert events[-1].type == SupervisorEventType.RUN_FAILED
     assert events[-1].data == {"code": "provider_unavailable", "message": "The configured OpenAI provider is unavailable."}
+
+
+def test_supervisor_translates_responses_web_search_lifecycle_queries_and_deduplicates_function_calls():
+    events = list(GPTSupervisor(provider=ResponsesApiLifecycleProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+    web_search_events = [event for event in events if event.type in {SupervisorEventType.WEB_SEARCH_STARTED, SupervisorEventType.WEB_SEARCH_COMPLETED}]
+    tool_events = [event for event in events if event.type == SupervisorEventType.TOOL_CALL]
+
+    assert [event.type for event in web_search_events] == [
+        SupervisorEventType.WEB_SEARCH_STARTED,
+        SupervisorEventType.WEB_SEARCH_COMPLETED,
+    ]
+    assert web_search_events[0].data == {"id": "ws-1"}
+    assert web_search_events[1].data == {
+        "id": "ws-1",
+        "queries": ["grid forecast", "Taipei weather"],
+        "sources": [{"url": "https://example.test/forecast", "title": "Forecast"}],
+    }
+    assert len(tool_events) == 1
+    assert tool_events[0].data == {
+        "callId": "fc-1",
+        "name": "query_energy_timeseries",
+        "arguments": {"site_id": "site-001"},
+    }
+
+
+def test_supervisor_accepts_legacy_singular_web_search_query():
+    class LegacyWebSearchProvider:
+        model = "gpt-5-mini"
+
+        def stream(self, *args, **kwargs):
+            yield {
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "web_search_call",
+                    "id": "ws-legacy",
+                    "action": {"query": "legacy grid forecast", "sources": []},
+                },
+            }
+
+    events = list(GPTSupervisor(provider=LegacyWebSearchProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+    assert next(event for event in events if event.type == SupervisorEventType.WEB_SEARCH_COMPLETED).data == {
+        "id": "ws-legacy",
+        "queries": ["legacy grid forecast"],
+        "sources": [],
+    }
+
+
+def test_supervisor_emits_terminal_error_for_nested_response_failure_payload():
+    events = list(GPTSupervisor(provider=NestedFailureProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+    assert [event.type for event in events[-2:]] == [SupervisorEventType.SPECIALIST_DELEGATED, SupervisorEventType.RUN_FAILED]
+    assert events[-1].data["code"] == "provider_unavailable"
 
 
 def test_supervisor_deterministic_mode_remains_explicitly_labelled():

@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
+import hashlib
 import json
 from typing import Any, Protocol
 from uuid import uuid4
@@ -135,8 +136,14 @@ class GPTSupervisor:
             recalled = (recall or self.recall)()
             evidence = {"site_memory": recalled if isinstance(recalled, dict) else {}}
             completed = False
+            emitted_function_call_ids: set[str] = set()
+            started_web_search_ids: set[str] = set()
             for raw_event in self.provider.stream(hat, context, user_message, evidence):
-                for event_type, data in _translate_response_event(raw_event):
+                for event_type, data in _translate_response_event(
+                    raw_event,
+                    emitted_function_call_ids=emitted_function_call_ids,
+                    started_web_search_ids=started_web_search_ids,
+                ):
                     if event_type == SupervisorEventType.RUN_COMPLETED:
                         completed = True
                     yield emit(event_type, data)
@@ -153,45 +160,77 @@ class GPTSupervisor:
             })
 
 
-def _translate_response_event(raw_event: Any) -> list[tuple[SupervisorEventType, dict[str, Any]]]:
+def _translate_response_event(
+    raw_event: Any,
+    *,
+    emitted_function_call_ids: set[str] | None = None,
+    started_web_search_ids: set[str] | None = None,
+) -> list[tuple[SupervisorEventType, dict[str, Any]]]:
+    emitted_function_call_ids = emitted_function_call_ids if emitted_function_call_ids is not None else set()
+    started_web_search_ids = started_web_search_ids if started_web_search_ids is not None else set()
     event_type = _field(raw_event, "type")
     if event_type == "response.output_text.delta":
         delta = _field(raw_event, "delta")
         return [(SupervisorEventType.ASSISTANT_DELTA, {"delta": delta if isinstance(delta, str) else ""})]
+    if event_type in {"response.web_search_call.in_progress", "response.web_search_call.searching"}:
+        web_search_id = _item_id(raw_event)
+        if web_search_id in started_web_search_ids:
+            return []
+        started_web_search_ids.add(web_search_id)
+        return [(SupervisorEventType.WEB_SEARCH_STARTED, {"id": web_search_id})]
+    if event_type == "response.web_search_call.completed":
+        return [(SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(raw_event))]
     if event_type == "response.output_item.added":
         item = _field(raw_event, "item")
         if _field(item, "type") == "web_search_call":
-            return [(SupervisorEventType.WEB_SEARCH_STARTED, {"id": _field(item, "id")})]
+            web_search_id = _item_id(item)
+            if web_search_id in started_web_search_ids:
+                return []
+            started_web_search_ids.add(web_search_id)
+            return [(SupervisorEventType.WEB_SEARCH_STARTED, {"id": web_search_id})]
     if event_type == "response.output_item.done":
         item = _field(raw_event, "item")
         if _field(item, "type") == "web_search_call":
-            action = _field(item, "action")
-            return [(SupervisorEventType.WEB_SEARCH_COMPLETED, {
-                "id": _field(item, "id"),
-                "query": _field(action, "query"),
-                "sources": _safe_sources(_field(action, "sources")),
-            })]
+            return [(SupervisorEventType.WEB_SEARCH_COMPLETED, _web_search_completed_data(raw_event, item))]
         if _field(item, "type") == "function_call":
-            return _function_call_event(_field(item, "name"), _field(item, "arguments"))
+            return _function_call_event(
+                _field(item, "name"),
+                _field(item, "arguments"),
+                _function_call_id(raw_event, item),
+                emitted_function_call_ids,
+            )
     if event_type == "response.function_call_arguments.done":
-        return _function_call_event(_field(raw_event, "name"), _field(raw_event, "arguments"))
+        return _function_call_event(
+            _field(raw_event, "name"),
+            _field(raw_event, "arguments"),
+            _function_call_id(raw_event),
+            emitted_function_call_ids,
+        )
     if event_type == "response.completed":
         return [(SupervisorEventType.RUN_COMPLETED, {"status": "completed"})]
     if event_type in {"error", "response.failed"}:
-        message = _field(raw_event, "message") or "OpenAI provider event failed"
+        message = _failure_message(raw_event)
         raise AgentCrewError(AgentCrewErrorCode.PROVIDER_UNAVAILABLE, str(message))
     return []
 
 
-def _function_call_event(name: Any, arguments: Any) -> list[tuple[SupervisorEventType, dict[str, Any]]]:
+def _function_call_event(
+    name: Any,
+    arguments: Any,
+    call_id: str,
+    emitted_function_call_ids: set[str],
+) -> list[tuple[SupervisorEventType, dict[str, Any]]]:
+    if call_id in emitted_function_call_ids:
+        return []
+    emitted_function_call_ids.add(call_id)
     safe_name = name if isinstance(name, str) else "unknown_tool"
     parsed = _parse_arguments(arguments)
     if safe_name == "delegate_to_specialist":
         try:
             return [(SupervisorEventType.SPECIALIST_DELEGATED, _delegation_data(AgentHat(parsed.get("hat"))))]
         except (TypeError, ValueError):
-            return [(SupervisorEventType.TOOL_CALL, {"name": safe_name, "arguments": parsed})]
-    return [(SupervisorEventType.TOOL_CALL, {"name": safe_name, "arguments": parsed})]
+            return [(SupervisorEventType.TOOL_CALL, {"callId": call_id, "name": safe_name, "arguments": parsed})]
+    return [(SupervisorEventType.TOOL_CALL, {"callId": call_id, "name": safe_name, "arguments": parsed})]
 
 
 def _field(value: Any, name: str) -> Any:
@@ -211,6 +250,77 @@ def _parse_arguments(value: Any) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
     return {}
+
+
+def _item_id(value: Any) -> str:
+    for field_name in ("item_id", "id", "call_id"):
+        candidate = _field(value, field_name)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return "unknown"
+
+
+def _function_call_id(raw_event: Any, item: Any | None = None) -> str:
+    for value in (raw_event, item):
+        if value is None:
+            continue
+        for field_name in ("item_id", "id", "call_id"):
+            candidate = _field(value, field_name)
+            if isinstance(candidate, str) and candidate:
+                return candidate
+    name = _field(item or raw_event, "name")
+    arguments = _field(item or raw_event, "arguments")
+    fingerprint = json.dumps([name, arguments], sort_keys=True, default=str, separators=(",", ":"))
+    return f"synthetic-{hashlib.sha256(fingerprint.encode()).hexdigest()[:16]}"
+
+
+def _web_search_completed_data(raw_event: Any, item: Any | None = None) -> dict[str, Any]:
+    item = item or _field(raw_event, "item")
+    action = _field(item, "action") if item is not None else None
+    queries = _safe_queries(
+        _first_present(
+            _field(raw_event, "queries"),
+            _field(item, "queries"),
+            _field(action, "queries"),
+            _field(raw_event, "query"),
+            _field(item, "query"),
+            _field(action, "query"),
+        )
+    )
+    return {
+        "id": _item_id(raw_event if _item_id(raw_event) != "unknown" else item),
+        "queries": queries,
+        "sources": _safe_sources(_first_present(
+            _field(raw_event, "sources"),
+            _field(item, "sources"),
+            _field(action, "sources"),
+        )),
+    }
+
+
+def _first_present(*values: Any) -> Any:
+    return next((value for value in values if value is not None), None)
+
+
+def _safe_queries(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if not isinstance(value, list):
+        return []
+    return [query for query in value if isinstance(query, str)]
+
+
+def _failure_message(raw_event: Any) -> str:
+    nested_response = _field(raw_event, "response")
+    for candidate in (
+        _field(raw_event, "message"),
+        _field(_field(raw_event, "error"), "message"),
+        _field(nested_response, "message"),
+        _field(_field(nested_response, "error"), "message"),
+    ):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return "OpenAI provider event failed"
 
 
 def _safe_sources(value: Any) -> list[dict[str, str]]:
