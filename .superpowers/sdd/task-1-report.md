@@ -99,3 +99,42 @@ Commands were run from `apps/site-integration-app/services/ems-api`.
 ### Cross-task dependency
 
 The pre-existing untracked AgentCrew foundation modules imported by the app remain a known cross-task dependency owned by Task 2 integration. They were not staged, rewritten, or otherwise changed by this follow-up commit.
+
+---
+
+## Reviewer fix follow-up 2
+
+### Implementation
+
+- Correlated `response.web_search_call.completed` with the later matching `response.output_item.done` by stable search id.
+- The public stream now emits exactly one `web_search.completed` event for a completed search, using the final output item's normalized `queries` and allowlisted `sources`.
+- Buffered provider completion data is emitted only as a terminal fallback when a matching final output item is absent.
+- Added a full lifecycle regression test covering `in_progress -> searching -> web_search_call.completed -> output_item.done -> response.completed`.
+
+### TDD evidence
+
+The new full-lifecycle test was added before the supervisor change. It failed as expected because the supervisor emitted two `web_search.completed` events; after the correlation change it passed.
+
+### Exact verification
+
+Command was run from `apps/site-integration-app/services/ems-api`.
+
+```text
+.venv/bin/python -m pytest -q tests/test_gpt_supervisor.py tests/test_openai_provider.py tests/test_fastapi_app.py
+....................                                                     [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/chuang/Desktop/projects/EMS/EMS-Demo/apps/site-integration-app/services/ems-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 1 warning in 0.16s
+```
+
+### Commit
+
+- Implementation commit: `c90d404` (`fix(agentcrew): correlate web search completions`).
+
+### Concerns
+
+- The only verification warning is the pre-existing FastAPI/Starlette `TestClient` deprecation warning concerning its `httpx` dependency.
