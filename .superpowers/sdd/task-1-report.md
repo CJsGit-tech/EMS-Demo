@@ -53,5 +53,5 @@ The only test warning is a pre-existing FastAPI/Starlette `TestClient` deprecati
 
 ## Concerns
 
-- The designated backend directory was already entirely untracked in the shared worktree. To avoid claiming or staging unrelated backend work, the implementation commit stages only the four Task 1 source/test paths. It therefore relies on the existing untracked AgentCrew foundation remaining present until the owning integration changes are committed.
+- The designated backend directory was already entirely untracked in the shared worktree. To avoid claiming or staging unrelated backend work, the implementation commit stages only the six Task 1 source/test paths. It therefore relies on the existing untracked AgentCrew foundation remaining present until the owning integration changes are committed.
 - Task 2 remains responsible for replacing the fixture-backed stream tool indication with the authoritative database-backed EMS MCP execution and durable persistence of streamed artifacts.
