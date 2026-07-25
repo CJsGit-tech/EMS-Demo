@@ -167,6 +167,72 @@ def test_concurrent_same_command_audit_appends_are_unique_and_ordered(
     _in_disposable_postgres(postgres_test_url, assertion)
 
 
+def test_runtime_role_appends_audit_only_through_guarded_function(
+    postgres_test_url: str, postgres_runtime_test_url: str
+) -> None:
+    async def assertion(engine: AsyncEngine) -> None:
+        async with engine.begin() as connection:
+            privileges = (
+                await connection.execute(
+                    text(
+                        "SELECT "
+                        "has_table_privilege('v2g_runtime', 'audit_records', 'SELECT'), "
+                        "has_table_privilege('v2g_runtime', 'audit_records', 'INSERT'), "
+                        "COALESCE(has_function_privilege("
+                        "'v2g_runtime', "
+                        "to_regprocedure("
+                        "'append_audit_record(character varying, character varying, jsonb)'"
+                        "), 'EXECUTE'), FALSE)"
+                    )
+                )
+            ).one()
+            assert privileges == (True, False, True)
+
+        runtime_engine = create_async_engine(postgres_runtime_test_url)
+        try:
+            async with runtime_engine.connect() as connection:
+                with pytest.raises(DBAPIError, match="permission denied for table audit_records"):
+                    await connection.execute(
+                        text(
+                            "INSERT INTO audit_records ("
+                            "command_id, sequence, event_type, payload, occurred_at"
+                            ") VALUES ("
+                            "'cmd-runtime-guarded', 99, 'command.tampered', "
+                            "'{\"actor\": \"runtime-test\"}'::jsonb, NOW())"
+                        )
+                    )
+                await connection.rollback()
+
+                for event_type in ("command.requested", "command.approved"):
+                    await connection.execute(
+                        text(
+                            "SELECT append_audit_record("
+                            "'cmd-runtime-guarded', CAST(:event_type AS VARCHAR), "
+                            "'{\"actor\": \"runtime-test\"}'::jsonb)"
+                        ),
+                        {"event_type": event_type},
+                    )
+                await connection.commit()
+        finally:
+            await runtime_engine.dispose()
+
+        async with engine.begin() as connection:
+            events = (
+                await connection.execute(
+                    text(
+                        "SELECT sequence, event_type FROM audit_records "
+                        "WHERE command_id = 'cmd-runtime-guarded' ORDER BY sequence"
+                    )
+                )
+            ).all()
+            assert events == [
+                (1, "command.requested"),
+                (2, "command.approved"),
+            ]
+
+    _in_disposable_postgres(postgres_test_url, assertion)
+
+
 def test_runtime_role_uses_only_controlled_work_order_transition_and_event_trigger(
     postgres_test_url: str, postgres_runtime_test_url: str
 ) -> None:

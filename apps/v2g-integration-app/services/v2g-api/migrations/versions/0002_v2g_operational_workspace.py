@@ -264,24 +264,71 @@ def upgrade() -> None:
             $$;
             """
         )
+        op.execute(
+            """
+            CREATE FUNCTION append_audit_record(
+                p_command_id VARCHAR,
+                p_event_type VARCHAR,
+                p_payload JSONB
+            ) RETURNS INTEGER
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = pg_catalog, public, pg_temp
+            AS $$
+            DECLARE
+                v_audit_id INTEGER;
+                v_command_id VARCHAR := btrim(p_command_id);
+                v_event_type VARCHAR := btrim(p_event_type);
+                v_sequence INTEGER;
+            BEGIN
+                IF COALESCE(v_command_id, '') = '' THEN
+                    RAISE EXCEPTION 'audit command_id is required';
+                END IF;
+                IF COALESCE(v_event_type, '') = '' THEN
+                    RAISE EXCEPTION 'audit event_type is required';
+                END IF;
+                IF p_payload IS NULL THEN
+                    RAISE EXCEPTION 'audit payload is required';
+                END IF;
+
+                PERFORM pg_advisory_xact_lock(hashtext(v_command_id));
+                SELECT COALESCE(MAX(sequence), 0) + 1 INTO v_sequence
+                FROM public.audit_records
+                WHERE command_id = v_command_id;
+
+                INSERT INTO public.audit_records (
+                    command_id, sequence, event_type, payload, occurred_at
+                ) VALUES (
+                    v_command_id, v_sequence, v_event_type, p_payload, CURRENT_TIMESTAMP
+                ) RETURNING audit_id INTO v_audit_id;
+                RETURN v_audit_id;
+            END;
+            $$;
+            """
+        )
         op.execute("REVOKE ALL ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) FROM PUBLIC")
         op.execute("REVOKE ALL ON FUNCTION append_demo_work_order_event(VARCHAR, VARCHAR, JSONB, VARCHAR, TEXT) FROM PUBLIC")
+        op.execute("REVOKE ALL ON FUNCTION append_audit_record(VARCHAR, VARCHAR, JSONB) FROM PUBLIC")
         op.execute("REVOKE ALL ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime")
         op.execute(
             "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_records, work_order_events, work_orders FROM v2g_runtime"
         )
         op.execute("GRANT USAGE ON SCHEMA public TO v2g_runtime")
-        op.execute("GRANT SELECT, INSERT ON TABLE audit_records TO v2g_runtime")
+        op.execute("GRANT SELECT ON TABLE audit_records TO v2g_runtime")
         op.execute("GRANT SELECT ON TABLE work_order_events TO v2g_runtime")
         op.execute("GRANT SELECT ON TABLE work_orders TO v2g_runtime")
         op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO v2g_runtime")
+        op.execute("GRANT EXECUTE ON FUNCTION append_audit_record(VARCHAR, VARCHAR, JSONB) TO v2g_runtime")
         op.execute("GRANT EXECUTE ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) TO v2g_runtime")
         op.execute("GRANT EXECUTE ON FUNCTION append_demo_work_order_event(VARCHAR, VARCHAR, JSONB, VARCHAR, TEXT) TO v2g_runtime")
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
+        op.execute("REVOKE ALL ON TABLE audit_records FROM v2g_runtime")
         op.execute("REVOKE ALL ON TABLE work_order_events FROM v2g_runtime")
+        op.execute("REVOKE ALL ON FUNCTION append_audit_record(VARCHAR, VARCHAR, JSONB) FROM v2g_runtime")
+        op.execute("DROP FUNCTION IF EXISTS append_audit_record(VARCHAR, VARCHAR, JSONB)")
         op.execute("REVOKE ALL ON FUNCTION append_demo_work_order_event(VARCHAR, VARCHAR, JSONB, VARCHAR, TEXT) FROM v2g_runtime")
         op.execute("DROP FUNCTION IF EXISTS append_demo_work_order_event(VARCHAR, VARCHAR, JSONB, VARCHAR, TEXT)")
         op.execute("REVOKE ALL ON FUNCTION transition_work_order_state(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT) FROM v2g_runtime")
