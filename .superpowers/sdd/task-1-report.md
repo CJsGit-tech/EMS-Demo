@@ -138,3 +138,68 @@ Command was run from `apps/site-integration-app/services/ems-api`.
 ### Concerns
 
 - The only verification warning is the pre-existing FastAPI/Starlette `TestClient` deprecation warning concerning its `httpx` dependency.
+
+---
+
+## Reviewer fix follow-up 3
+
+### Implementation
+
+- Added a terminal-emission guard in `GPTSupervisor.stream` so exactly one of `run.completed` and `run.failed` can be emitted for a provider-backed run.
+- A provider exception raised after `response.completed` is now suppressed at the public SSE boundary; an error before a terminal event still produces `run.failed`.
+- Added a regression provider sequence that yields `response.completed` and then raises `AgentCrewError`; the test asserts the terminal event list is exactly `[run.completed]`.
+
+### TDD evidence
+
+The regression test was added before the supervisor change. Its red run reproduced the defect:
+
+```text
+.venv/bin/python -m pytest -q tests/test_gpt_supervisor.py
+......F..                                                                [100%]
+=================================== FAILURES ===================================
+____ test_supervisor_does_not_emit_failed_after_a_completed_provider_event _____
+
+    def test_supervisor_does_not_emit_failed_after_a_completed_provider_event():
+        events = list(GPTSupervisor(provider=LateFailingProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+        terminal_events = [
+            event.type
+            for event in events
+            if event.type in {SupervisorEventType.RUN_COMPLETED, SupervisorEventType.RUN_FAILED}
+        ]
+
+>       assert terminal_events == [SupervisorEventType.RUN_COMPLETED]
+E       AssertionError: assert [<SupervisorE...'run.failed'>] == [<SupervisorE...n.completed'>]
+E
+E         Left contains one more item: <SupervisorEventType.RUN_FAILED: 'run.failed'>
+E         Use -v to get more diff
+
+tests/test_gpt_supervisor.py:224: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_gpt_supervisor.py::test_supervisor_does_not_emit_failed_after_a_completed_provider_event
+1 failed, 8 passed in 0.06s
+```
+
+### Exact verification
+
+Command was run from `apps/site-integration-app/services/ems-api`.
+
+```text
+.venv/bin/python -m pytest -q tests/test_gpt_supervisor.py tests/test_openai_provider.py tests/test_fastapi_app.py
+.....................                                                    [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/chuang/Desktop/projects/EMS/EMS-Demo/apps/site-integration-app/services/ems-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+21 passed, 1 warning in 0.24s
+```
+
+### Commit
+
+- Implementation commit: `1e792b2` (`fix(agentcrew): make stream terminals exclusive`).
+
+### Concerns
+
+- The only verification warning is the pre-existing FastAPI/Starlette `TestClient` deprecation warning concerning its `httpx` dependency.
