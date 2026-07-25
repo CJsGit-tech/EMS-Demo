@@ -49,6 +49,7 @@ def test_transition_updates_the_expected_site_and_appends_attributed_event(repos
     assert events[-1].event_type == "work_order.state_changed"
     assert events[-1].actor == "operator-17"
     assert events[-1].reason == "現場確認後開始檢修"
+    assert events[-1].payload["source"] == "simulated-runtime"
     assert events[-1].payload["from_state"] == "open"
     assert events[-1].payload["to_state"] == "in_progress"
 
@@ -72,6 +73,75 @@ def test_transition_rejects_missing_attribution_and_wrong_site(repository):
             )
 
     asyncio.run(invalid_transitions())
+
+
+def test_transition_allows_only_the_three_permitted_state_pairs(repository):
+    async def transitions():
+        async with repository._sessions() as session:
+            await seed_demo_fleet(session)
+
+        for work_order_id, state in (
+            ("wo-001", "open"),
+            ("wo-001", "completed"),
+            ("wo-002", "in_progress"),
+            ("wo-003", "open"),
+            ("wo-003", "in_progress"),
+            ("wo-003", "completed"),
+        ):
+            with pytest.raises(ValueError, match="not permitted"):
+                await repository.transition_work_order_state(
+                    work_order_id,
+                    DEMO_SITE_ID,
+                    state,
+                    actor="operator-17",
+                    reason="驗證不允許的狀態轉換",
+                )
+
+        returned_to_open = await repository.transition_work_order_state(
+            "wo-002",
+            DEMO_SITE_ID,
+            "open",
+            actor="operator-17",
+            reason="現場複檢後退回待處理",
+        )
+        return returned_to_open
+
+    order = asyncio.run(transitions())
+
+    assert order.state == "open"
+
+
+def test_demo_scope_rejects_transitions_and_event_appends_for_real_other_site_order(repository):
+    async def other_site_operations():
+        async with repository._sessions.begin() as session:
+            session.add(
+                WorkOrder(
+                    work_order_id="wo-other-site",
+                    site_id="other-site",
+                    asset_id=None,
+                    source_alarm_code=None,
+                    state="open",
+                    severity="low",
+                    assigned_team="維運一組",
+                    summary="Other-site work order",
+                    created_at=DEMO_SEED_AT,
+                )
+            )
+
+        with pytest.raises(ValueError, match="demo-v2g-site"):
+            await repository.transition_work_order_state(
+                "wo-other-site",
+                "other-site",
+                "in_progress",
+                actor="operator-17",
+                reason="不得跨站轉換",
+            )
+        with pytest.raises(ValueError, match="demo-v2g-site"):
+            await repository.append_work_order_event(
+                "wo-other-site", "work_order.note_added", {"source": "simulated"}
+            )
+
+    asyncio.run(other_site_operations())
 
 
 def test_site_aware_foreign_keys_reject_cross_site_string_and_work_order_rows(repository):

@@ -202,7 +202,7 @@ def test_runtime_role_uses_only_controlled_work_order_transition_and_event_trigg
                     )
                 )
             ).one()
-            assert privileges == (True, False, True, False, True)
+            assert privileges == (True, False, False, False, True)
 
         runtime_engine = create_async_engine(postgres_runtime_test_url)
         try:
@@ -227,12 +227,17 @@ def test_runtime_role_uses_only_controlled_work_order_transition_and_event_trigg
             event = (
                 await connection.execute(
                     text(
-                        "SELECT event_type, actor, reason FROM work_order_events "
+                        "SELECT event_type, actor, reason, payload->>'source' FROM work_order_events "
                         "WHERE work_order_id = 'wo-role-test'"
                     )
                 )
             ).one()
-            assert event == ("work_order.state_changed", "runtime-test", "controlled transition")
+            assert event == (
+                "work_order.state_changed",
+                "runtime-test",
+                "controlled transition",
+                "simulated-runtime",
+            )
             with pytest.raises(DBAPIError, match="work_order_events are append-only"):
                 await connection.execute(
                     text(
@@ -240,5 +245,87 @@ def test_runtime_role_uses_only_controlled_work_order_transition_and_event_trigg
                         "WHERE work_order_id = 'wo-role-test'"
                     )
                 )
+
+    _in_disposable_postgres(postgres_test_url, assertion)
+
+
+def test_runtime_transition_rejects_every_disallowed_pair_and_other_site_history(
+    postgres_test_url: str, postgres_runtime_test_url: str
+) -> None:
+    async def assertion(engine: AsyncEngine) -> None:
+        async with engine.begin() as connection:
+            for work_order_id, site_id, state in (
+                ("wo-pair-open", "demo-v2g-site", "open"),
+                ("wo-pair-progress", "demo-v2g-site", "in_progress"),
+                ("wo-pair-completed", "demo-v2g-site", "completed"),
+                ("wo-other-site", "other-site", "open"),
+            ):
+                await connection.execute(
+                    text(
+                        "INSERT INTO work_orders ("
+                        "work_order_id, site_id, state, severity, assigned_team, summary, source, created_at"
+                        ") VALUES ("
+                        ":work_order_id, :site_id, :state, 'low', 'test-team', "
+                        "'Transition-pair test', 'simulated', NOW())"
+                    ),
+                    {"work_order_id": work_order_id, "site_id": site_id, "state": state},
+                )
+            # This emulates a future broad bootstrap grant: the trigger must still
+            # block unscoped direct runtime event insertion.
+            await connection.execute(text("GRANT INSERT ON TABLE work_order_events TO v2g_runtime"))
+
+        runtime_engine = create_async_engine(postgres_runtime_test_url)
+        try:
+            async with runtime_engine.connect() as connection:
+                for work_order_id, target_state in (
+                    ("wo-pair-open", "open"),
+                    ("wo-pair-open", "completed"),
+                    ("wo-pair-progress", "in_progress"),
+                    ("wo-pair-completed", "open"),
+                    ("wo-pair-completed", "in_progress"),
+                    ("wo-pair-completed", "completed"),
+                ):
+                    with pytest.raises(DBAPIError, match="not permitted"):
+                        await connection.execute(
+                            text(
+                                "SELECT transition_work_order_state("
+                                ":work_order_id, 'demo-v2g-site', :target_state, "
+                                "'runtime-test', 'rejected pair')"
+                            ),
+                            {"work_order_id": work_order_id, "target_state": target_state},
+                        )
+                    await connection.rollback()
+
+                with pytest.raises(DBAPIError, match="demo-v2g-site"):
+                    await connection.execute(
+                        text(
+                            "SELECT transition_work_order_state("
+                            "'wo-other-site', 'other-site', 'in_progress', "
+                            "'runtime-test', 'cross-site transition')"
+                        )
+                    )
+                await connection.rollback()
+
+                with pytest.raises(DBAPIError, match="demo-v2g-site"):
+                    await connection.execute(
+                        text(
+                            "SELECT append_demo_work_order_event("
+                            "'wo-other-site', 'work_order.note_added', "
+                            "'{\"source\": \"simulated-runtime\"}'::jsonb, NULL, NULL)"
+                        )
+                    )
+                await connection.rollback()
+
+                with pytest.raises(DBAPIError, match="controlled function"):
+                    await connection.execute(
+                        text(
+                            "INSERT INTO work_order_events (work_order_id, event_type, payload) VALUES ("
+                            "'wo-other-site', 'work_order.note_added', "
+                            "'{\"source\": \"simulated-runtime\"}'::jsonb)"
+                        )
+                    )
+                await connection.rollback()
+        finally:
+            await runtime_engine.dispose()
 
     _in_disposable_postgres(postgres_test_url, assertion)

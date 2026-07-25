@@ -249,3 +249,54 @@ its permitted `SELECT`/event `INSERT`/function `EXECUTE` rights, and a
 successful controlled runtime transition. An initial live failure exposed the
 missing migration `USAGE` grant on `public`; adding that grant made the
 security-definer function resolvable by `v2g_runtime`.
+
+## Re-review repair: fixed simulator scope and exact transitions (2026-07-25)
+
+The stable Task 2 artifact was re-read from
+`.superpowers/sdd/v2g-zh-task-2-brief.md`; the generic brief path was not used.
+
+### Boundary changes
+
+- The only permitted state pairs are now exactly `open → in_progress`,
+  `in_progress → completed`, and `in_progress → open`. The repository map and
+  the PostgreSQL security-definer function use the same predicate; every other
+  pair, including all completed-work-order transitions, is rejected.
+- Both repository transitions and PostgreSQL transitions reject any site other
+  than `demo-v2g-site`, even when the work-order record genuinely exists at
+  another site.
+- Generic event append is demo-scoped. On PostgreSQL it uses the new
+  `append_demo_work_order_event(...)` security-definer function. Runtime direct
+  `work_order_events` insertion is blocked by a trigger even if another
+  bootstrap step later grants table `INSERT`; state events must use the
+  transition function.
+- Runtime transition payloads now use `source: simulated-runtime`.
+
+### TDD and verification evidence
+
+New portable tests were added before this repair and failed as expected:
+
+```text
+.venv/bin/pytest tests/test_work_order_security.py -q
+..FF.                                                                    [100%]
+ValueError: state transition from 'in_progress' to 'open' is not permitted
+Failed: DID NOT RAISE <class 'ValueError'>
+2 failed, 3 passed in 8.86s
+```
+
+After the repair, the focused portable suite passed:
+
+```text
+.venv/bin/pytest tests/test_work_order_security.py tests/test_workspace_seed.py tests/test_repository.py tests/test_task7_infrastructure_security.py -q
+.............                                                            [100%]
+13 passed in 12.97s
+```
+
+The live PostgreSQL integration suite now checks every rejected normal-state
+pair, a real other-site work order, controlled append refusal, and the direct
+runtime-insert trigger:
+
+```text
+docker compose run ... api pytest tests/test_postgres_audit_integration.py -q
+.....                                                                    [100%]
+5 passed in 3.24s
+```

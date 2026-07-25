@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from v2g.models import AuditRecord, Base, Evse, InverterReading, StringReading, WorkOrder, WorkOrderEvent
+from v2g.simulator import DEMO_SITE_ID
 
 
 class V2GRepository:
@@ -16,7 +18,7 @@ class V2GRepository:
 
     SQLITE_TEST_URL = "sqlite+aiosqlite:///:memory:"
     WORK_ORDER_STATE_EVENT = "work_order.state_changed"
-    WORK_ORDER_TRANSITIONS = {"open": {"in_progress"}, "in_progress": {"completed"}}
+    WORK_ORDER_TRANSITIONS = {"open": {"in_progress"}, "in_progress": {"completed", "open"}}
 
     def __init__(self, engine: AsyncEngine):
         self._engine = engine
@@ -89,7 +91,33 @@ class V2GRepository:
         reason = self._required_text(reason, "reason") if reason is not None else None
         if event_type == self.WORK_ORDER_STATE_EVENT and (actor is None or reason is None):
             raise ValueError("work-order state events require actor and reason")
+        if event_type == self.WORK_ORDER_STATE_EVENT:
+            raise ValueError("work-order state events must use the controlled transition boundary")
         async with self._sessions.begin() as session:
+            if self._engine.dialect.name == "postgresql":
+                event_id = await session.scalar(
+                    text(
+                        "SELECT append_demo_work_order_event("
+                        "CAST(:work_order_id AS VARCHAR), "
+                        "CAST(:event_type AS VARCHAR), "
+                        "CAST(:payload AS JSONB), "
+                        "CAST(:actor AS VARCHAR), "
+                        "CAST(:reason AS TEXT))"
+                    ),
+                    {
+                        "work_order_id": work_order_id,
+                        "event_type": event_type,
+                        "payload": json.dumps(payload),
+                        "actor": actor,
+                        "reason": reason,
+                    },
+                )
+                event = await session.get(WorkOrderEvent, event_id)
+                if event is None:
+                    raise RuntimeError("controlled work-order event append did not return an event")
+                return event
+
+            await self._demo_work_order(session, work_order_id)
             event = WorkOrderEvent(
                 work_order_id=work_order_id,
                 event_type=event_type,
@@ -113,6 +141,8 @@ class V2GRepository:
         """Atomically transition one site-scoped work order with an immutable event."""
         actor = self._required_text(actor, "actor")
         reason = self._required_text(reason, "reason")
+        if site_id != DEMO_SITE_ID:
+            raise ValueError(f"work-order transitions are restricted to {DEMO_SITE_ID}")
         if self._engine.dialect.name == "postgresql":
             async with self._sessions.begin() as session:
                 await session.execute(
@@ -153,7 +183,7 @@ class V2GRepository:
                 actor=actor,
                 reason=reason,
                 payload={
-                    "source": "runtime",
+                    "source": "simulated-runtime",
                     "from_state": previous_state,
                     "to_state": state,
                     "actor": actor,
@@ -219,3 +249,10 @@ class V2GRepository:
         )
         if asset_site_id != order.site_id:
             raise ValueError("work order asset does not belong to the expected site")
+
+    @staticmethod
+    async def _demo_work_order(session: AsyncSession, work_order_id: str) -> WorkOrder:
+        order = await session.get(WorkOrder, work_order_id)
+        if order is None or order.site_id != DEMO_SITE_ID:
+            raise ValueError(f"work-order events are restricted to {DEMO_SITE_ID}")
+        return order
