@@ -9,6 +9,7 @@ import { HistorianPage, historianIsStale } from "./features/historian/HistorianP
 import { EventManagementPage } from "./features/monitoring/EventManagementPage.jsx";
 import { InverterMonitoringPage } from "./features/monitoring/InverterMonitoringPage.jsx";
 import { LiveMonitoringPage } from "./features/monitoring/LiveMonitoringPage.jsx";
+import { OperationsPage } from "./features/operations/OperationsPage.jsx";
 import { DiagnosticsPage } from "./features/overview/DiagnosticsPage.jsx";
 import { FleetOverviewPage } from "./features/overview/FleetOverviewPage.jsx";
 import { SiteOverviewPage } from "./features/overview/SiteOverviewPage.jsx";
@@ -46,7 +47,7 @@ function AppShell() {
     let active = true;
     const load = async () => {
       const window = historianWindow(rangeHours);
-      if (activeView === "siteOverview") {
+      if (["siteOverview", "operations"].includes(activeView)) {
         const [overview, fleet, alarms, recommendations, historian] = await Promise.all([v2gApi.getOverview(), v2gApi.getFleet(), v2gApi.getAlarms(), v2gApi.getRecommendations(), v2gApi.getHistorian(window)]);
         return { overview, fleet, alarms, recommendations, historian };
       }
@@ -85,7 +86,7 @@ function AppShell() {
       return { ...current, data: { ...current.data, recommendations: recommendations.map((recommendation) => recommendation.command_id === command.command_id ? { ...recommendation, state: command.state } : recommendation) } };
     });
   };
-  const headings = { siteOverview: "page.siteOverview", fleetOverview: "page.fleetOverview", diagnostics: "page.diagnostics", events: "page.events", liveMonitoring: "page.liveMonitoring", inverters: "page.inverters", dispatch: "nav.dispatchSupervisor", historian: "nav.powerHistorian" };
+  const headings = { siteOverview: "page.siteOverview", fleetOverview: "page.fleetOverview", diagnostics: "page.diagnostics", events: "page.events", liveMonitoring: "page.liveMonitoring", inverters: "page.inverters", operations: "nav.operationsDashboard", dispatch: "nav.dispatchSupervisor", historian: "nav.powerHistorian" };
   const alarmCount = data?.alarms?.alarms?.filter((alarm) => alarm.state !== "cleared").length ?? 0;
   let page;
   if (activeView === "siteOverview") page = <SiteOverviewPage data={data} state={state} error={error} />;
@@ -94,6 +95,7 @@ function AppShell() {
   if (activeView === "events") page = <EventManagementPage data={data} state={state} error={error} />;
   if (activeView === "liveMonitoring") page = <LiveMonitoringPage data={data} state={state} error={error} />;
   if (activeView === "inverters") page = <InverterMonitoringPage data={data} state={state} error={error} />;
+  if (activeView === "operations") page = <OperationsPage overview={data?.overview} fleet={data?.fleet} alarms={data?.alarms} recommendations={data?.recommendations} historian={data?.historian} state={state} error={error} />;
   if (activeView === "dispatch") page = <DispatchPage recommendations={Array.isArray(data?.recommendations) ? data.recommendations : []} state={state} error={error} onApprove={recordApproval} onReject={recordRejection} onCommandResolved={updateDispatchCommand} />;
   if (activeView === "historian") page = <HistorianPage historian={data} state={state} error={error} rangeHours={rangeHours} onRangeChange={setRangeHours} />;
 

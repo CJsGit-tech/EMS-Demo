@@ -65,6 +65,19 @@ test("keeps direct keyboard focus on each real selected navigation view", async 
   expect(diagnostics).toHaveFocus();
 });
 
+test("opens the existing Operations workspace from the localized operations navigation", async () => {
+  stubApi();
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findAllByRole("heading", { name: "電站總覽" });
+
+  await user.click(screen.getByRole("button", { name: "營運儀表板" }));
+
+  expect(await screen.findByRole("heading", { name: "Operations" })).toBeVisible();
+  expect(screen.getByText("Site power trajectory")).toBeVisible();
+  expect(screen.getByRole("button", { name: "營運儀表板" })).toHaveAttribute("aria-current", "page");
+});
+
 test.each([
   ["Approve", "approved", "/commands/cmd-014/approve"],
   ["Reject", "rejected", "/commands/cmd-014/reject"],

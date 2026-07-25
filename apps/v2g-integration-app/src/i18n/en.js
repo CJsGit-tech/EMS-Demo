@@ -13,6 +13,7 @@ export default {
   "nav.liveMonitoring": "Live monitoring",
   "nav.inverters": "Inverter monitoring",
   "nav.operations": "Operations",
+  "nav.operationsDashboard": "Operations dashboard",
   "nav.dispatchSupervisor": "Dispatch supervisor",
   "nav.analytics": "Analytics",
   "nav.powerHistorian": "Power historian",

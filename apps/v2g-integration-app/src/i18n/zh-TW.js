@@ -13,6 +13,7 @@ export default {
   "nav.liveMonitoring": "即時監控",
   "nav.inverters": "變流器監控",
   "nav.operations": "維運",
+  "nav.operationsDashboard": "營運儀表板",
   "nav.dispatchSupervisor": "調度監督",
   "nav.analytics": "分析",
   "nav.powerHistorian": "電力歷史資料",
