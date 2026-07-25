@@ -23,3 +23,7 @@ Task 1: complete (site AgentCrew mission contracts, provenance fix, focused revi
 Task 2: complete (mission-control UI, focused review approved).
 Task 3: complete (demo orchestration metadata, precedence review approved).
 Task 1: complete (AgentCrew preference policy application, task review and final security review approved; backend focused suite reported 17 passing).
+GPT-5-mini AgentCrew Copilot Task 1: complete (commits 79baa7b..1e792b2 plus report updates; spec and quality review approved; 21 focused and 68 full API tests reported).
+GPT-5-mini AgentCrew Copilot Task 2: complete (commits 51613d1..3f82658 plus report updates; spec and quality review approved; 81 backend tests and PostgreSQL integration passing).
+GPT-5-mini AgentCrew Copilot Task 3: complete (commits 0e0d631 and 82b6fc4; 23 focused frontend tests and build passing; browser smoke reached site-scoped approval state).
+GPT-5-mini AgentCrew Copilot Task 4: complete (commit 82b6fc4; Compose/provider defaults, health model status, explicit fixture opt-in regression coverage; backend test runner blocked by stale local venv interpreter).
