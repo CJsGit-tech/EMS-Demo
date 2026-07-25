@@ -40,7 +40,7 @@ INFO  [alembic.runtime.migration] Running upgrade 0006_report_draft_revisions ->
 
 $ EMS_INTEGRATION_DATABASE=1 EMS_PERSISTENCE_MODE=postgres EMS_MCP_GATEWAY_MODE=database uv run --with asyncpg python -m pytest tests/test_agentcrew_postgres_integration.py -q
 .                                                                        [100%]
-1 passed in 8.10s
+1 passed in 5.21s
 
 $ uv run --with asyncpg python -m py_compile src/agentcrew/app.py src/agentcrew/mcp.py src/agentcrew/mcp_server.py src/agentcrew/persistence.py src/agentcrew/runtime.py src/agentcrew/service.py migrations/versions/0007_agentcrew_public_approvals.py
 # exit 0; no output
