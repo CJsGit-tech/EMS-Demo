@@ -15,6 +15,14 @@ from v2g.simulator import DEMO_SITE_ID
 
 MetricName = Literal["power_kw"]
 DataQuality = Literal["good", "stale"]
+WorkOrderState = Literal["open", "in_progress", "completed"]
+InverterTrendMetric = Literal[
+    "ac_power_kw",
+    "dc_power_kw",
+    "temperature_c",
+    "efficiency_percent",
+]
+AlarmState = Literal["open", "cleared"]
 
 
 class ContractModel(BaseModel):
@@ -112,6 +120,187 @@ class RecommendationResponse(ContractModel):
 class RecommendationsResponse(ContractModel):
     site_id: str
     recommendations: tuple[RecommendationResponse, ...]
+
+
+class SimulatedResponse(ContractModel):
+    """Explicit metadata shared by every operational-workspace response."""
+
+    simulated: Literal[True] = True
+
+
+class DiagnosticAssetResponse(ContractModel):
+    asset_id: str
+    communication_state: str
+    latest_telemetry_at: datetime
+    telemetry_gap_minutes: float
+    open_alarm_count: int
+
+    @field_validator("latest_telemetry_at")
+    @classmethod
+    def telemetry_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("latest_telemetry_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class DiagnosticsResponse(SimulatedResponse):
+    site_id: str
+    observed_at: datetime
+    open_alarm_count: int
+    assets: tuple[DiagnosticAssetResponse, ...]
+
+    @field_validator("observed_at")
+    @classmethod
+    def observed_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class InverterResponse(ContractModel):
+    asset_id: str
+    ac_power_kw: float
+    dc_power_kw: float
+    temperature_c: float
+    efficiency_percent: float
+    communication_state: str
+    alarm_count: int
+    observed_at: datetime
+
+    @field_validator("observed_at")
+    @classmethod
+    def inverter_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class InvertersResponse(SimulatedResponse):
+    site_id: str
+    inverters: tuple[InverterResponse, ...]
+
+
+class InverterTrendPointResponse(ContractModel):
+    observed_at: datetime
+    value: float
+
+    @field_validator("observed_at")
+    @classmethod
+    def trend_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class InverterTrendResponse(SimulatedResponse):
+    site_id: str
+    asset_id: str
+    metric: InverterTrendMetric
+    from_: datetime = Field(serialization_alias="from")
+    to: datetime
+    points: tuple[InverterTrendPointResponse, ...]
+
+    @field_validator("from_", "to")
+    @classmethod
+    def range_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("time ranges must include a timezone")
+        return value.astimezone(UTC)
+
+
+class EventResponse(ContractModel):
+    event_id: int
+    asset_id: str | None
+    code: str
+    severity: str
+    state: AlarmState
+    message: str
+    raised_at: datetime
+    cleared_at: datetime | None
+
+    @field_validator("raised_at", "cleared_at")
+    @classmethod
+    def event_timestamp_requires_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("event timestamps must include a timezone")
+        return value.astimezone(UTC)
+
+
+class EventsResponse(SimulatedResponse):
+    site_id: str
+    events: tuple[EventResponse, ...]
+
+
+class WorkOrderResponse(SimulatedResponse):
+    work_order_id: str
+    site_id: str
+    asset_id: str | None
+    source_alarm_code: str | None
+    state: WorkOrderState
+    severity: str
+    assigned_team: str
+    summary: str
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def work_order_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("created_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class WorkOrdersResponse(SimulatedResponse):
+    site_id: str
+    work_orders: tuple[WorkOrderResponse, ...]
+
+
+class WorkOrderTransitionRequest(ContractModel):
+    actor: NonEmptyText
+    reason: NonEmptyText
+    state: WorkOrderState
+
+
+class AnalyticsInverterResponse(InverterResponse):
+    efficiency_deviation_percent: float
+
+
+class StringResponse(ContractModel):
+    inverter_id: str
+    string_id: str
+    dc_power_kw: float
+    observed_at: datetime
+
+    @field_validator("observed_at")
+    @classmethod
+    def string_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return value.astimezone(UTC)
+
+
+class EventAggregateResponse(ContractModel):
+    total: int
+    by_severity: tuple[tuple[str, int], ...]
+
+
+class AnalyticsResponse(SimulatedResponse):
+    site_id: str
+    from_: datetime = Field(serialization_alias="from")
+    to: datetime
+    site_efficiency: float | None
+    inverters: tuple[AnalyticsInverterResponse, ...]
+    strings: tuple[StringResponse, ...]
+    events: EventAggregateResponse
+
+    @field_validator("from_", "to")
+    @classmethod
+    def analytics_timestamp_requires_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("time ranges must include a timezone")
+        return value.astimezone(UTC)
 
 
 class CommandCreateRequest(ContractModel):
