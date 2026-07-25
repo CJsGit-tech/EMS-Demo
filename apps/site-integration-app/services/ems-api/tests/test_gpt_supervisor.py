@@ -74,6 +74,14 @@ class NestedFailureProvider:
         )
 
 
+class LateFailingProvider:
+    model = "gpt-5-mini"
+
+    def stream(self, *args, **kwargs):
+        yield {"type": "response.completed"}
+        raise AgentCrewError(AgentCrewErrorCode.PROVIDER_UNAVAILABLE, "connection closed after completion")
+
+
 class CorrelatedWebSearchLifecycleProvider:
     """A single Responses web search reported by both completion event forms."""
 
@@ -202,6 +210,18 @@ def test_supervisor_emits_terminal_error_for_nested_response_failure_payload():
 
     assert [event.type for event in events[-2:]] == [SupervisorEventType.SPECIALIST_DELEGATED, SupervisorEventType.RUN_FAILED]
     assert events[-1].data["code"] == "provider_unavailable"
+
+
+def test_supervisor_does_not_emit_failed_after_a_completed_provider_event():
+    events = list(GPTSupervisor(provider=LateFailingProvider()).stream(CONTEXT, "Analyze energy trend", "session-1"))
+
+    terminal_events = [
+        event.type
+        for event in events
+        if event.type in {SupervisorEventType.RUN_COMPLETED, SupervisorEventType.RUN_FAILED}
+    ]
+
+    assert terminal_events == [SupervisorEventType.RUN_COMPLETED]
 
 
 def test_supervisor_deterministic_mode_remains_explicitly_labelled():

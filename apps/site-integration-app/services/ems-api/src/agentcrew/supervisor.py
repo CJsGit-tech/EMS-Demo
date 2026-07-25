@@ -132,10 +132,10 @@ class GPTSupervisor:
             })
             return
 
+        terminal_event_emitted = False
         try:
             recalled = (recall or self.recall)()
             evidence = {"site_memory": recalled if isinstance(recalled, dict) else {}}
-            completed = False
             emitted_function_call_ids: set[str] = set()
             started_web_search_ids: set[str] = set()
             completed_web_search_ids: set[str] = set()
@@ -148,20 +148,25 @@ class GPTSupervisor:
                     completed_web_search_ids=completed_web_search_ids,
                     pending_web_search_completions=pending_web_search_completions,
                 ):
-                    if event_type == SupervisorEventType.RUN_COMPLETED:
-                        completed = True
+                    if event_type in {SupervisorEventType.RUN_COMPLETED, SupervisorEventType.RUN_FAILED}:
+                        if terminal_event_emitted:
+                            continue
+                        terminal_event_emitted = True
                     yield emit(event_type, data)
-            if not completed:
+            if not terminal_event_emitted:
+                terminal_event_emitted = True
                 yield emit(SupervisorEventType.RUN_COMPLETED, {
                     "provider": {"mode": provider["mode"], "model": provider["model"]},
                     "status": "completed",
                 })
         except Exception as exc:
-            code = exc.code.value if isinstance(exc, AgentCrewError) else AgentCrewErrorCode.PROVIDER_UNAVAILABLE.value
-            yield emit(SupervisorEventType.RUN_FAILED, {
-                "code": code,
-                "message": "The configured OpenAI provider is unavailable.",
-            })
+            if not terminal_event_emitted:
+                terminal_event_emitted = True
+                code = exc.code.value if isinstance(exc, AgentCrewError) else AgentCrewErrorCode.PROVIDER_UNAVAILABLE.value
+                yield emit(SupervisorEventType.RUN_FAILED, {
+                    "code": code,
+                    "message": "The configured OpenAI provider is unavailable.",
+                })
 
 
 def _translate_response_event(
